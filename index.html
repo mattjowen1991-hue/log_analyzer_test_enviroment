@@ -1,0 +1,1486 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Hubstaff Log Analyzer v33</title>
+  <style>
+    :root {
+      --bg: #0f172a; --panel: #111827; --card: #0b1220; --text: #e5e7eb;
+      --muted: #9ca3af; --accent: #22c55e; --warn: #f59e0b; --danger: #ef4444;
+      --resume: #818cf8; --discard: #6b7280; --border: #1f2937; --link: #3b82f6;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: system-ui, -apple-system, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+    
+    header { padding: 20px; border-bottom: 1px solid var(--border); background: var(--panel); }
+    header h1 { font-size: 18px; margin-bottom: 4px; }
+    header p { font-size: 12px; color: var(--muted); }
+    
+    main { padding: 16px; max-width: 1400px; margin: 0 auto; }
+    
+    .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 16px; margin-bottom: 16px; }
+    
+    .controls { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 12px; }
+    
+    button { background: var(--panel); color: var(--text); border: 1px solid var(--border); border-radius: 8px; padding: 8px 14px; font-size: 13px; font-weight: 600; cursor: pointer; }
+    button:hover { border-color: #374151; }
+    button.primary { background: #1e40af; border-color: #1e40af; }
+    
+    textarea { width: 100%; height: 120px; background: #030712; color: var(--text); border: 1px solid var(--border); border-radius: 8px; padding: 12px; font-family: monospace; font-size: 12px; resize: vertical; }
+    
+    .status { font-size: 12px; color: var(--muted); margin-left: 8px; }
+    .status.success { color: var(--accent); }
+    .status.error { color: var(--danger); }
+    
+    .toggle-row { display: flex; align-items: center; gap: 16px; margin-top: 10px; font-size: 13px; color: var(--muted); }
+    .toggle-row label { display: flex; align-items: center; gap: 6px; cursor: pointer; }
+    .help-link { color: var(--accent); text-decoration: underline; cursor: pointer; margin-left: auto; }
+    
+    .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin-bottom: 16px; }
+    .kpi { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 14px; }
+    .kpi-label { font-size: 11px; color: var(--muted); font-weight: 600; margin-bottom: 6px; }
+    .kpi-value { font-size: 22px; font-weight: 700; }
+    .kpi-note { font-size: 10px; color: var(--warn); margin-top: 4px; }
+    
+    .section-title { font-size: 13px; color: var(--muted); margin-bottom: 10px; font-weight: 600; }
+    
+    .table-wrap { max-height: 250px; overflow: auto; border: 1px solid var(--border); border-radius: 8px; }
+    table { width: 100%; border-collapse: collapse; font-size: 12px; }
+    th, td { padding: 8px 10px; text-align: left; border-bottom: 1px solid var(--border); }
+    th { background: var(--panel); color: var(--muted); font-weight: 600; position: sticky; top: 0; }
+    tr:last-child td { border-bottom: none; }
+    tr.highlight { background: rgba(34,197,94,0.2) !important; }
+    tr.highlight td { color: #fff; font-weight: 600; }
+    
+    .tag { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; }
+    .tag.ok { background: rgba(34,197,94,0.15); color: var(--accent); }
+    .tag.warn { background: rgba(245,158,11,0.15); color: var(--warn); }
+    .tag.danger { background: rgba(239,68,68,0.15); color: var(--danger); }
+    .tag.resume { background: rgba(129,140,248,0.15); color: var(--resume); }
+    
+    .time-link { color: var(--link); cursor: pointer; text-decoration: none; font-weight: 600; }
+    .time-link:hover { text-decoration: underline; }
+    
+    .timeline-section { display: none; }
+    .timeline-section.visible { display: block; }
+    
+    .timeline-header { display: flex; align-items: center; gap: 16px; margin-bottom: 12px; flex-wrap: wrap; }
+    .timeline-legend { font-size: 11px; color: var(--muted); display: flex; gap: 12px; flex-wrap: wrap; }
+    .timeline-legend span { display: flex; align-items: center; gap: 4px; }
+    .legend-box { width: 12px; height: 12px; border-radius: 2px; }
+    
+    .zoom-controls { display: flex; align-items: center; gap: 8px; margin-left: auto; background: var(--panel); padding: 6px 12px; border-radius: 6px; border: 1px solid var(--border); }
+    .zoom-controls label { font-size: 11px; color: var(--muted); }
+    .zoom-controls input[type=range] { width: 120px; cursor: pointer; }
+    .zoom-controls button { padding: 4px 8px; font-size: 11px; }
+    
+    .timeline-container { background: rgba(0,0,0,0.3); border: 1px solid var(--border); border-radius: 8px; padding: 16px; overflow-x: auto; position: relative; cursor: crosshair; }
+    .timeline-content { position: relative; min-width: 100%; }
+    .timeline-track { position: relative; height: 32px; background: rgba(255,255,255,0.03); border-radius: 4px; margin-bottom: 12px; border: 1px solid var(--border); }
+    .timeline-label { font-size: 10px; color: var(--muted); margin-bottom: 4px; font-weight: 600; text-transform: uppercase; }
+    
+    .t-block { position: absolute; height: 32px; border-radius: 3px; min-width: 3px; cursor: pointer; transition: opacity 0.15s; z-index: 10; }
+    .t-block:hover { opacity: 0.75; }
+    .t-block.selected { box-shadow: 0 0 0 2px #fff, 0 0 12px rgba(255,255,255,0.5); z-index: 20; }
+    .t-block.USER { background: var(--accent); }
+    .t-block.IDLE { background: var(--warn); }
+    .t-block.RESUMED { background: var(--resume); box-shadow: inset 0 0 0 2px rgba(255,255,255,0.3); }
+    .t-block.DISCARDED { background: repeating-linear-gradient(45deg, var(--discard), var(--discard) 4px, rgba(107,114,128,0.4) 4px, rgba(107,114,128,0.4) 8px); }
+    .t-block.CONFIG_STOPPED { background: linear-gradient(90deg, var(--accent) 0%, var(--accent) 85%, var(--danger) 85%, var(--danger) 100%); }
+    
+    .t-marker { position: absolute; top: 50%; transform: translate(-50%, -50%); font-size: 14px; cursor: pointer; z-index: 10; }
+    .t-marker:hover { transform: translate(-50%, -50%) scale(1.3); }
+    .t-marker.selected { background: rgba(255,255,255,0.2); border-radius: 50%; padding: 2px; }
+    .t-marker.clean { color: var(--accent); }
+    .t-marker.crash { color: var(--danger); }
+    .t-marker.shutdown { color: var(--muted); }
+    
+    .timeline-cursor { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--danger); z-index: 5; display: none; pointer-events: none; box-shadow: 0 0 6px var(--danger); }
+    
+    .info-box { position: absolute; background: var(--panel); border: 1px solid var(--accent); border-radius: 10px; padding: 14px; z-index: 1000; display: none; box-shadow: 0 10px 40px rgba(0,0,0,0.6); min-width: 220px; max-width: 300px; }
+    .info-box h4 { color: var(--accent); font-size: 13px; margin-bottom: 8px; padding-bottom: 6px; border-bottom: 1px solid var(--border); }
+    .info-box p { font-size: 12px; color: var(--text); margin: 4px 0; line-height: 1.5; }
+    .info-box .label { color: var(--muted); }
+    .info-box .touch-link { color: var(--link); text-decoration: underline; cursor: pointer; font-size: 11px; margin-top: 8px; display: inline-block; }
+    
+    .warnings-list { list-style: none; padding-left: 0; }
+    .warnings-list li { padding: 10px 0; font-size: 12px; color: var(--text); border-bottom: 1px dashed var(--border); line-height: 1.6; }
+    .warnings-list li:last-child { border-bottom: none; }
+    .learn-more-btn { background: var(--link); border: none; color: #fff; padding: 3px 10px; border-radius: 4px; font-size: 11px; cursor: pointer; margin-left: 10px; vertical-align: middle; }
+    .learn-more-btn:hover { background: #2563eb; }
+    
+    .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.75); z-index: 1001; align-items: center; justify-content: center; }
+    .modal-overlay.visible { display: flex; }
+    .modal { background: var(--bg); border: 1px solid var(--border); border-radius: 12px; width: 90%; max-width: 800px; max-height: 85vh; overflow-y: auto; padding: 24px; }
+    .modal h2 { color: var(--accent); margin-bottom: 16px; font-size: 18px; }
+    .modal h3 { color: var(--warn); margin: 20px 0 10px; font-size: 14px; border-bottom: 1px solid var(--border); padding-bottom: 6px; }
+    .modal p, .modal li { font-size: 13px; color: var(--muted); line-height: 1.6; margin-bottom: 8px; }
+    .modal code { background: var(--card); padding: 2px 6px; border-radius: 4px; font-size: 12px; color: var(--accent); }
+    .modal .callout { background: rgba(245,158,11,0.1); border-left: 3px solid var(--warn); padding: 12px; border-radius: 0 8px 8px 0; margin: 12px 0; }
+    .modal .tech-box { background: rgba(129,140,248,0.1); border: 1px solid rgba(129,140,248,0.3); border-radius: 8px; padding: 16px; margin-top: 20px; }
+    .modal .tech-box h4 { color: var(--resume); margin: 0 0 10px 0; font-size: 13px; }
+    .close-btn { float: right; background: var(--panel); border: 1px solid var(--border); color: var(--text); padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 12px; }
+    
+    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    @media (max-width: 900px) { .grid-2 { grid-template-columns: 1fr; } }
+    .event-card { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 10px; margin-bottom: 8px; }
+    .event-card h5 { margin: 0 0 4px; font-size: 12px; color: var(--text); }
+    .event-card p { margin: 0; font-size: 11px; }
+    .event-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    @media (max-width: 600px) { .event-grid { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Hubstaff Audit Log Analyzer (v33)</h1>
+    <p>Analyze audit.log files to understand tracking sessions, crashes, idle time, and more.</p>
+    <p style="font-size:11px; color:var(--accent); margin-top:4px;">🔒 Privacy: All analysis happens in your browser. No data is sent to any server.</p>
+  </header>
+  
+  <main>
+    <div class="card">
+      <div class="controls">
+        <button class="primary" id="analyzeBtn">Analyze</button>
+        <button id="sampleBtn">Sample: Crash Recovered</button>
+        <button id="sampleLostBtn">Sample: Time Lost</button>
+        <button id="clearBtn">Clear</button>
+        <span class="status" id="status"></span>
+      </div>
+      <textarea id="logInput" placeholder="Paste audit.log contents here..."></textarea>
+      <div class="toggle-row">
+        <label><input type="checkbox" id="plainMode" checked> Plain English mode</label>
+        <span class="help-link" id="helpBtn">Help & Info</span>
+      </div>
+    </div>
+    
+    <div class="kpis">
+      <div class="kpi">
+        <div class="kpi-label">Tracked Time (est.)</div>
+        <div class="kpi-value" id="kpiTotal">0:00:00</div>
+        <div class="kpi-note">ℹ️ May differ slightly from dashboard</div>
+      </div>
+      <div class="kpi">
+        <div class="kpi-label">Intervals</div>
+        <div class="kpi-value" id="kpiIntervals">0</div>
+      </div>
+      <div class="kpi">
+        <div class="kpi-label">Idle Kept</div>
+        <div class="kpi-value" id="kpiIdleKept">0:00:00</div>
+      </div>
+      <div class="kpi">
+        <div class="kpi-label">Idle Discarded</div>
+        <div class="kpi-value" id="kpiIdleDisc">0:00:00</div>
+      </div>
+      <div class="kpi">
+        <div class="kpi-label">Warnings</div>
+        <div class="kpi-value" id="kpiWarnings">0</div>
+      </div>
+    </div>
+    
+    <div class="card timeline-section" id="timelineSection">
+      <div class="timeline-header">
+        <div class="section-title" style="margin:0;">Visual Timeline</div>
+        <div class="timeline-legend">
+          <span><div class="legend-box" style="background:var(--accent)"></div> Tracking</span>
+          <span><div class="legend-box" style="background:var(--warn)"></div> Idle</span>
+          <span><div class="legend-box" style="background:var(--discard)"></div> Discarded</span>
+          <span><div class="legend-box" style="background:var(--resume)"></div> Resumed</span>
+          <span><div class="legend-box" style="background:linear-gradient(90deg, var(--accent) 60%, var(--danger) 60%)"></div> Config Stop</span>
+          <span style="color:var(--accent)">●</span><span>Start</span>
+          <span style="color:var(--danger)">✖</span><span>Crash</span>
+        </div>
+        <div class="zoom-controls">
+          <label>Zoom:</label>
+          <input type="range" id="zoomSlider" min="1" max="30" value="1" step="0.5">
+          <button id="resetZoom">Reset</button>
+        </div>
+      </div>
+      <div class="timeline-container" id="timelineContainer">
+        <div class="timeline-content" id="timelineContent">
+          <div class="timeline-cursor" id="timelineCursor"></div>
+          <div class="timeline-label">Tracking</div>
+          <div class="timeline-track" id="trackMain"></div>
+          <div class="timeline-label">App Events</div>
+          <div class="timeline-track" id="trackEvents"></div>
+        </div>
+      </div>
+    </div>
+    
+    <div class="grid-2">
+      <div class="card">
+        <div class="section-title">Interval Breakdown</div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>#</th><th>Start</th><th>Stop</th><th>Duration</th><th>Stop Reason</th></tr></thead>
+            <tbody id="intervalsBody"></tbody>
+          </table>
+        </div>
+      </div>
+      
+      <div class="card">
+        <div class="section-title">Events & Warnings</div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Time</th><th>Event</th><th>Details</th></tr></thead>
+            <tbody id="eventsBody"></tbody>
+          </table>
+        </div>
+        <div style="margin-top:12px;">
+          <div class="section-title">Parsing Warnings</div>
+          <ul class="warnings-list" id="warningsList"><li style="color:var(--muted)">No warnings</li></ul>
+        </div>
+      </div>
+    </div>
+  <footer style="text-align:center; padding:20px; border-top:1px solid var(--border); margin-top:20px; font-size:12px; color:var(--muted);">
+      <span>Hubstaff Log Analyzer v33</span>
+      <span style="margin:0 10px;">|</span>
+      <span class="help-link" id="privacyBtn">🔒 Privacy Info</span>
+    </footer>
+  </main>
+  
+  <div class="modal-overlay" id="privacyModal">
+    <div class="modal" style="max-width:550px;">
+      <button class="close-btn" id="closePrivacy">Close</button>
+      <h2>🔒 Privacy & Data Security</h2>
+      
+      <h3>Your data stays on your device</h3>
+      <p>This tool runs <strong>entirely in your web browser</strong>. When you paste log data:</p>
+      <ul>
+        <li>✅ Data is processed locally on your computer</li>
+        <li>✅ Nothing is sent to any server</li>
+        <li>✅ No data is stored in cookies or browser storage</li>
+        <li>✅ No tracking or analytics</li>
+      </ul>
+      
+      <h3>What happens when you click "Clear"</h3>
+      <ul>
+        <li>The text input is emptied</li>
+        <li>All parsed data is overwritten in memory</li>
+        <li>All displayed results are removed</li>
+        <li>A confirmation message appears</li>
+      </ul>
+      
+      <h3>What happens when you close the page</h3>
+      <ul>
+        <li>All data is automatically cleared</li>
+        <li>Nothing persists after you leave</li>
+        <li>No data remains in browser history</li>
+      </ul>
+      
+      <h3>Best practices</h3>
+      <ul>
+        <li>Click <strong>"Clear"</strong> when you're done analyzing</li>
+        <li>Close the browser tab when finished</li>
+        <li>Avoid sharing screenshots that show email addresses</li>
+      </ul>
+      
+      <div style="background:rgba(34,197,94,0.1); border:1px solid var(--accent); border-radius:8px; padding:12px; margin-top:16px;">
+        <p style="margin:0; color:var(--accent);"><strong>✅ Safe to use with sensitive logs</strong></p>
+        <p style="margin:8px 0 0 0; font-size:12px;">This tool is designed for support teams handling customer data. Your logs never leave your browser.</p>
+      </div>
+    </div>
+  </div>
+  
+  <div class="info-box" id="infoBox">
+    <h4 id="infoTitle">Details</h4>
+    <div id="infoContent"></div>
+  </div>
+  
+  <div class="modal-overlay" id="helpModal">
+    <div class="modal">
+      <button class="close-btn" id="closeHelp">Close</button>
+      <h2>📊 Log Analyzer Help</h2>
+      
+      <h3>1. About "Tracked Time (est.)"</h3>
+      <p>This time is calculated from when the user clicked <strong>Start</strong> and <strong>Stop</strong>.</p>
+      <div class="callout">
+        <strong>💡 Why might the dashboard show different time?</strong><br>
+        The dashboard may differ by 1-2 minutes. This is normal - it's how Hubstaff calculates time internally. Small differences are expected and nothing is wrong.
+      </div>
+      
+      <h3>2. Common Events Explained</h3>
+      <div class="event-grid">
+        <div class="event-card"><h5>START_TRACKING by [USER]</h5><p>User clicked Start button.</p></div>
+        <div class="event-card"><h5>STOP_TRACKING by [USER]</h5><p>User clicked Stop button.</p></div>
+        <div class="event-card"><h5>by [RESUMED]</h5><p>Time recovered after crash.</p></div>
+        <div class="event-card"><h5>by [IDLE]</h5><p>Stopped due to idle timeout.</p></div>
+        <div class="event-card"><h5>STARTUP_CLEAN</h5><p>App opened normally.</p></div>
+        <div class="event-card"><h5>STARTUP_UNCLEAN</h5><p>App opened after crash/force quit.</p></div>
+        <div class="event-card"><h5>KeepIdle: 1</h5><p>User kept idle time.</p></div>
+        <div class="event-card"><h5>StopTracking: 1</h5><p>User discarded idle time.</p></div>
+      </div>
+      
+      <h3>3. Understanding Crashes</h3>
+      <p>When you see <strong>STARTUP_UNCLEAN</strong>, it means the app restarted after a crash. Look for <strong>RESUME_DETECTED</strong> next - this means time was recovered.</p>
+      <p><strong>Note:</strong> Time won't auto-resume if more than 1 hour passed (8 hours on mobile).</p>
+      
+      <h3>4. Warning Signs</h3>
+      <p><strong>Unclosed START:</strong> Timer started but never stopped - usually means a crash.</p>
+      <p><strong>Two STARTs in a row:</strong> Tracking loop crashed while app was still running.</p>
+      
+      <h3>5. Using the Timeline</h3>
+      <p><strong>Click any bar</strong> to see details and highlight the matching row in the table.</p>
+      <p><strong>Use the zoom slider</strong> to expand the timeline for more detail.</p>
+      <p><strong>Click empty space</strong> to place a red cursor line.</p>
+      
+      <div class="tech-box">
+        <h4>🔧 Technical Details (for Tech Team)</h4>
+        <p>The audit log records event timestamps. The dashboard uses slot-based calculations (10-minute slots). Expected variance: 0-120 seconds.</p>
+        <p>For exact time, search <code>hubstaff.log</code> for: <code>Applied activity. Total:</code></p>
+      </div>
+      
+      <h3>7. How The Analyzer Works (Technical Reference)</h3>
+      <p><em>This section documents the logic used to calculate all values. Useful for debugging if the analyzer shows unexpected results.</em></p>
+      
+      <h4>📊 Tracked Time (est.) - Interval Logic</h4>
+      <p>An <strong>interval</strong> is defined as a pair of one <code>(START_TRACKING)</code> event and the very next <code>(STOP_TRACKING)</code> or <code>(SHUTDOWN)</code> event.</p>
+      <ol>
+        <li>All log lines are parsed and sorted by timestamp</li>
+        <li>The analyzer loops through looking for <code>START_TRACKING</code> events</li>
+        <li>When found, it's held in memory as an "open start"</li>
+        <li>Continue until finding <code>STOP_TRACKING</code> or <code>SHUTDOWN</code></li>
+        <li>Calculate duration between start and stop timestamps</li>
+        <li>Save the completed interval, then look for the next start</li>
+      </ol>
+      <p><strong>"Tracked Time (est.)"</strong> is the sum of all interval durations.</p>
+      
+      <h4>🔄 Crash & Resume Logic</h4>
+      <p>This corrects inaccurate timestamps that occur after app crashes:</p>
+      <ol>
+        <li>When the parser finds a <code>(RESUME_DETECTED)</code> event, it extracts and stores the original <code>Start time:</code> from the log message</li>
+        <li>It then looks for the <code>(START_TRACKING) ... by [RESUMED]</code> event that immediately follows</li>
+        <li>The analyzer <strong>discards</strong> the timestamp from the <code>by [RESUMED]</code> line and <strong>substitutes</strong> the original start time from <code>RESUME_DETECTED</code></li>
+        <li>This corrected START event (with the earlier, accurate timestamp) is used to start the interval</li>
+      </ol>
+      <p><strong>Resume limits:</strong> Time won't auto-resume if more than 1 hour passed (desktop) or 8 hours (mobile). Look for <code>RESUME_IGNORED</code> in these cases.</p>
+      
+      <h4>⏸️ Idle Time (Kept / Discarded)</h4>
+      <ol>
+        <li>The analyzer loops through all <code>(IDLE_ANSWER)</code> events</li>
+        <li>For each, it looks <em>backwards</em> to find the most recent <code>(IDLE_WAKE)</code> event that occurred <em>before</em> it</li>
+        <li>It extracts the <code>after X seconds</code> value from that <code>IDLE_WAKE</code> event</li>
+        <li>Based on the <code>IDLE_ANSWER</code> flags:
+          <ul>
+            <li><code>KeepIdle: 1</code> → seconds added to "Idle (Kept)" total</li>
+            <li><code>StopTracking: 1</code> → seconds added to "Idle (Discarded)" total</li>
+          </ul>
+        </li>
+      </ol>
+      
+      <h4>⚠️ Warning Detection</h4>
+      <p>The analyzer detects these patterns:</p>
+      <ul>
+        <li><strong>Unclosed START:</strong> A <code>START_TRACKING</code> with no matching <code>STOP_TRACKING</code> before the next START or end of log</li>
+        <li><strong>Unmatched STOP:</strong> A <code>STOP_TRACKING</code> found when there's no open START being tracked</li>
+        <li><strong>Quick Start/Stop:</strong> An interval where duration ≤ 5 seconds and both start and stop were <code>by [USER]</code></li>
+        <li><strong>Stopped by Config:</strong> Any interval where stop reason is <code>CONFIGURATION</code></li>
+        <li><strong>Crash Recovered:</strong> <code>STARTUP_UNCLEAN</code> followed by <code>RESUME_DETECTED</code> within 1 minute</li>
+        <li><strong>Crash Time Lost:</strong> <code>STARTUP_UNCLEAN</code> followed by <code>RESUME_IGNORED</code>, or crash while tracking with no resume</li>
+      </ul>
+      
+      <h4>📈 Timeline Visualization</h4>
+      <p>The timeline plots all intervals and events on a time scale:</p>
+      <ul>
+        <li><strong>Time range:</strong> 5 minutes before earliest event to 5 minutes after latest event</li>
+        <li><strong>Bar position:</strong> <code>((eventTime - minTime) / totalDuration) * 100%</code></li>
+        <li><strong>Bar color:</strong> Based on <code>startReason</code> (USER=green, IDLE=orange, RESUMED=purple) unless stopped by CONFIGURATION (green with red end)</li>
+        <li><strong>Markers:</strong> STARTUP_CLEAN (green dot), STARTUP_UNCLEAN (red X), SHUTDOWN (gray dot)</li>
+      </ul>
+      
+      <h4>🕐 Timestamp Parsing</h4>
+      <p>The analyzer handles these timestamp formats:</p>
+      <ul>
+        <li><code>2025-12-04 12:39:01.667205+1100</code> (timezone without colon)</li>
+        <li><code>2025-12-04 12:39:01.667205+11:00</code> (timezone with colon)</li>
+        <li><code>2025-12-04T12:39:01.667205Z</code> (UTC/Zulu time)</li>
+      </ul>
+      <p>All times displayed use the browser's local timezone for readability.</p>
+    </div>
+  </div>
+  
+  <div class="modal-overlay" id="touchModal">
+    <div class="modal" style="max-width:500px;">
+      <button class="close-btn" id="closeTouchModal">Close</button>
+      <h2>Why are these bars touching?</h2>
+      <p>You're seeing two tracking periods back-to-back with no gap.</p>
+      <h3>Most Common Reason: Kept Idle Time</h3>
+      <p>When a user returns from idle and chooses <strong>"Keep idle time"</strong>, two blocks are created:</p>
+      <p><strong>1.</strong> Active work before going idle (green bar)</p>
+      <p><strong>2.</strong> The idle time they kept (orange bar)</p>
+      <div class="callout">
+        <strong>Is time missing?</strong> No! The bars connect perfectly - all time is accounted for.
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-overlay" id="learnMoreModal">
+    <div class="modal" style="max-width:600px;">
+      <button class="close-btn" id="closeLearnMore">Close</button>
+      <h2 id="learnMoreTitle">About this warning</h2>
+      <div id="learnMoreContent"></div>
+    </div>
+  </div>
+
+  <script>
+    const $ = id => document.getElementById(id);
+    const pad = n => String(n).padStart(2, '0');
+    const fmtTime = s => { s = Math.max(0, Math.floor(s)); return Math.floor(s/3600) + ':' + pad(Math.floor((s%3600)/60)) + ':' + pad(s%60); };
+    
+    let result = null;
+    let selectedEl = null;
+    let timelineMin = null;
+    let timelineDur = null;
+    let focusRatio = null;
+    
+    function parseTs(line) {
+      const m = line.match(/(\d{4}-\d{2}-\d{2})[\sT](\d{2}:\d{2}:\d{2})(?:\.(\d+))?([+-]\d{2}:?\d{2}|Z|\s[+-]\d{4})/);
+      if (!m) return null;
+      let tz = m[4].trim();
+      // Handle +1100 format (no colon)
+      if (tz.length === 5 && (tz.startsWith('+') || tz.startsWith('-'))) {
+        tz = tz.slice(0, 3) + ':' + tz.slice(3);
+      }
+      const ms = m[3] ? m[3].padEnd(3,'0').slice(0,3) : '000';
+      const d = new Date(`${m[1]}T${m[2]}.${ms}${tz}`);
+      return isNaN(d.getTime()) ? null : d;
+    }
+    
+    function parseLine(line) {
+      const ts = parseTs(line);
+      let type = null, reason = null, plain = '', secs = null, keepIdle = null, stopTrack = null, resumeStart = null;
+      
+      if (line.includes('(START_TRACKING)')) type = 'START_TRACKING';
+      else if (line.includes('(STOP_TRACKING)')) type = 'STOP_TRACKING';
+      else if (line.includes('(IDLE_WAKE)')) { type = 'IDLE_WAKE'; plain = 'User returned from idle.'; }
+      else if (line.includes('(IDLE)') && !line.includes('IDLE_')) { type = 'IDLE'; plain = 'User went idle.'; }
+      else if (line.includes('(START_BREAK)')) { type = 'START_BREAK'; plain = 'User started a break.'; }
+      else if (line.includes('(STOP_BREAK)')) { type = 'STOP_BREAK'; plain = 'User ended a break.'; }
+      else if (line.includes('(SHUTDOWN)')) { type = 'SHUTDOWN'; plain = 'App closed normally.'; }
+      else if (line.includes('(LOCATIONS_STATUS)')) { 
+        type = 'LOCATIONS_STATUS'; 
+        if (line.includes('Authorized')) plain = '📍 Location permissions granted.';
+        else if (line.includes('Denied') || line.includes('Restricted')) plain = '📍 Location permissions denied or restricted.';
+        else plain = '📍 Location permission status changed.';
+      }
+      else if (line.includes('Entered a geofence') || line.includes('Entered region')) { type = 'GEOFENCE_ENTER'; plain = '📍 User entered a Job Site.'; }
+      else if (line.includes('Exited region')) { type = 'GEOFENCE_EXIT'; plain = '📍 User left a Job Site.'; }
+      else if (line.includes('Discard=1')) { 
+        type = 'DISCARD'; 
+        if (line.includes('Timesheet is locked')) plain = '🔒 Time rejected - timesheet is locked/approved.';
+        else if (line.includes('future')) plain = '⏰ Time rejected - computer clock was set to the future.';
+        else if (line.includes('Duplicate')) plain = '📋 Time rejected - duplicate record already exists.';
+        else if (line.includes('too large')) plain = '📊 Time rejected - time slot exceeded 10 minutes.';
+        else plain = '❌ Time was discarded/rejected by server.';
+      }
+      else if (line.includes('Network Error')) { type = 'NETWORK_ERROR'; plain = '🌐 Network error - could not connect to server.'; }
+      else if (line.includes('Only injected input') || line.includes('was partially injected')) { type = 'INJECTED_INPUT'; plain = '⚠️ Detected injected/simulated input activity.'; }
+      else if (line.includes('Simulating missed input')) { type = 'SIMULATED_INPUT'; plain = '⚠️ Input was simulated due to detection issue.'; }
+      else if (line.includes('locked or screensaver active')) { type = 'SCREEN_LOCKED'; plain = '🔒 Input discarded - screen was locked or screensaver active.'; }
+      else if (line.includes('by [PROJECT_CONFIGURATION_LOCATION]')) { type = 'LEFT_JOBSITE'; plain = '📍 Tracking stopped - user left required Job Site.'; }
+      else if (line.includes('(STARTUP_CLEAN)')) { type = 'STARTUP_CLEAN'; plain = 'App opened normally.'; }
+      else if (line.includes('(STARTUP_UNCLEAN)')) { type = 'STARTUP_UNCLEAN'; plain = 'App opened after crash/force quit.'; }
+      else if (line.includes('(RESUME_DETECTED)')) {
+        type = 'RESUME_DETECTED'; plain = 'Found previous session to recover.';
+        const sm = line.match(/Start time:\s*(\d{4}-\d{2}-\d{2}\s\d{2}:\d{2}:\d{2})/);
+        const tzm = line.match(/([+-]\d{2}:?\d{2})/);
+        if (sm && tzm) {
+          let tz = tzm[1]; if (!tz.includes(':')) tz = tz.slice(0,3)+':'+tz.slice(3);
+          resumeStart = new Date(sm[1].replace(' ','T') + '.000' + tz);
+        }
+      }
+      else if (line.includes('(RESUME_IGNORED)')) { type = 'RESUME_IGNORED'; plain = 'Previous session too old to recover.'; }
+      else if (line.includes('(IDLE_ANSWER)')) {
+        type = 'IDLE_ANSWER';
+        const km = line.match(/KeepIdle:\s*(\d+)/), sm2 = line.match(/StopTracking:\s*(\d+)/);
+        if (km) keepIdle = parseInt(km[1]);
+        if (sm2) stopTrack = parseInt(sm2[1]);
+        plain = keepIdle === 1 ? 'User KEPT idle time.' : stopTrack === 1 ? 'User DISCARDED idle time.' : 'User responded to idle prompt.';
+      }
+      else if (line.toLowerCase().includes('sentry event')) { type = 'SENTRY'; plain = 'Crash reported to Sentry.'; }
+      
+      if (type === 'START_TRACKING' || type === 'STOP_TRACKING') {
+        const rm = line.match(/by \[([^\]]+)\]/);
+        reason = rm ? rm[1] : 'USER';
+      }
+      
+      const fm = line.match(/(?:for|after)\s+(\d+)\s+seconds/i);
+      if (fm) secs = parseInt(fm[1]);
+      
+      return { ts, type, reason, plain, secs, keepIdle, stopTrack, resumeStart, raw: line };
+    }
+    
+    function analyze(text) {
+      const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+      const events = lines.map(parseLine).filter(e => e.ts && e.type).sort((a,b) => a.ts - b.ts);
+      
+      if (!events.length) return null;
+      
+      const warns = [], intervals = [], discarded = [];
+      let open = null, lastResume = null;
+      
+      for (const e of events) {
+        if (e.type === 'RESUME_DETECTED') { lastResume = e; continue; }
+        if (e.type === 'RESUME_IGNORED') { lastResume = null; continue; }
+        if (['STARTUP_CLEAN','STARTUP_UNCLEAN','SENTRY'].includes(e.type)) continue;
+        
+        if (e.type === 'START_TRACKING') {
+          if (open) warns.push({ type: 'UNCLOSED', msg: 'Unclosed START at ' + open.ts.toLocaleTimeString(), time: open.ts });
+          if (e.reason === 'RESUMED' && lastResume?.resumeStart) {
+            e.ts = lastResume.resumeStart;
+            e.reason = 'RESUMED';
+            lastResume = null;
+          }
+          open = e;
+        } else if (e.type === 'STOP_TRACKING' || e.type === 'SHUTDOWN') {
+          if (!open) {
+            warns.push({ type: 'UNMATCHED', msg: 'Unmatched STOP at ' + e.ts.toLocaleTimeString(), time: e.ts });
+          } else {
+            intervals.push({ start: open.ts, stop: e.ts, secs: (e.ts - open.ts)/1000, startReason: open.reason || 'USER', stopReason: e.reason || (e.type === 'SHUTDOWN' ? 'SHUTDOWN' : 'USER') });
+            open = null;
+          }
+        }
+      }
+      
+      if (open) warns.push({ type: 'UNCLOSED', msg: 'Timer still running at ' + open.ts.toLocaleTimeString(), time: open.ts });
+      
+      // Sort intervals first
+      intervals.sort((a,b) => a.start - b.start);
+      
+      // Detect quick start/stop (accidental double-click)
+      for (let i = 0; i < intervals.length; i++) {
+        const it = intervals[i];
+        if (it.secs <= 5 && it.startReason === 'USER' && it.stopReason === 'USER') {
+          warns.push({ 
+            type: 'QUICK_STARTSTOP', 
+            msg: `Quick start/stop at ${it.start.toLocaleTimeString()} (${Math.round(it.secs)}s) - likely accidental double-click`,
+            time: it.start
+          });
+        }
+        // Detect stopped by configuration
+        if (it.stopReason === 'CONFIGURATION') {
+          warns.push({
+            type: 'STOPPED_BY_CONFIG',
+            msg: `Tracking stopped by configuration at ${it.stop.toLocaleTimeString()}`,
+            time: it.stop
+          });
+        }
+      }
+      
+      // Detect crash events and calculate impact
+      const crashes = events.filter(e => e.type === 'STARTUP_UNCLEAN');
+      const resumes = events.filter(e => e.type === 'RESUME_DETECTED');
+      const resumeIgnores = events.filter(e => e.type === 'RESUME_IGNORED');
+      
+      for (const crash of crashes) {
+        // Find if there was a resume or ignore after this crash
+        const resumeAfter = resumes.find(r => r.ts > crash.ts && r.ts - crash.ts < 60000); // within 1 min
+        const ignoreAfter = resumeIgnores.find(r => r.ts > crash.ts && r.ts - crash.ts < 60000);
+        
+        if (resumeAfter && resumeAfter.resumeStart) {
+          // Calculate recovered time
+          const recoveredSecs = (resumeAfter.ts - resumeAfter.resumeStart) / 1000;
+          warns.push({
+            type: 'CRASH_RECOVERED',
+            msg: `App crashed at ${crash.ts.toLocaleTimeString()} - successfully recovered ${fmtTime(recoveredSecs)} of tracking time`,
+            time: crash.ts,
+            recovered: recoveredSecs
+          });
+        } else if (ignoreAfter) {
+          // Resume was ignored (too old)
+          warns.push({
+            type: 'CRASH_TIME_LOST',
+            msg: `App crashed at ${crash.ts.toLocaleTimeString()} - previous session was too old to recover (over 1 hour)`,
+            time: crash.ts
+          });
+        } else {
+          // Crash but no resume info - check if there was an open interval
+          const unclosedStart = events.filter(e => e.type === 'START_TRACKING' && e.ts < crash.ts).pop();
+          const matchingStop = events.find(e => (e.type === 'STOP_TRACKING' || e.type === 'SHUTDOWN') && e.ts > unclosedStart?.ts && e.ts < crash.ts);
+          
+          if (unclosedStart && !matchingStop) {
+            const lostSecs = (crash.ts - unclosedStart.ts) / 1000;
+            warns.push({
+              type: 'CRASH_TIME_LOST',
+              msg: `App crashed at ${crash.ts.toLocaleTimeString()} while tracking - potentially lost ~${fmtTime(lostSecs)} (check if time appears in dashboard)`,
+              time: crash.ts,
+              lost: lostSecs
+            });
+          } else {
+            warns.push({
+              type: 'CRASH_NO_TRACKING',
+              msg: `App crashed at ${crash.ts.toLocaleTimeString()} - user was not tracking at the time`,
+              time: crash.ts
+            });
+          }
+        }
+      }
+      
+      let idleKept = 0, idleDisc = 0;
+      const answers = events.filter(e => e.type === 'IDLE_ANSWER');
+      for (const a of answers) {
+        const wake = events.filter(e => e.type === 'IDLE_WAKE' && e.ts < a.ts).pop();
+        if (wake?.secs) {
+          if (a.keepIdle === 1) idleKept += wake.secs;
+          else if (a.stopTrack === 1) {
+            idleDisc += wake.secs;
+            discarded.push({ start: new Date(wake.ts - wake.secs*1000), stop: wake.ts, secs: wake.secs });
+          }
+        }
+      }
+      
+      const others = events.filter(e => !['START_TRACKING','STOP_TRACKING'].includes(e.type));
+      
+      return { intervals, discarded, warns, events: others, idleKept, idleDisc, allEvents: events };
+    }
+    
+    function hideInfoBox() {
+      $('infoBox').style.display = 'none';
+      if (selectedEl) { selectedEl.classList.remove('selected'); selectedEl = null; }
+      document.querySelectorAll('tr.highlight').forEach(r => r.classList.remove('highlight'));
+    }
+    
+    function showInfoBox(e, title, content) {
+      const box = $('infoBox');
+      $('infoTitle').textContent = title;
+      $('infoContent').innerHTML = content;
+      box.style.display = 'block';
+      
+      let top = e.pageY - box.offsetHeight - 10;
+      let left = e.pageX - box.offsetWidth / 2;
+      if (top < window.scrollY + 10) top = e.pageY + 15;
+      if (left < 10) left = 10;
+      if (left + box.offsetWidth > window.innerWidth - 10) left = window.innerWidth - box.offsetWidth - 10;
+      
+      box.style.top = top + 'px';
+      box.style.left = left + 'px';
+    }
+    
+    function render(data) {
+      const plain = $('plainMode').checked;
+      
+      if (!data) {
+        $('kpiTotal').textContent = '0:00:00';
+        $('kpiIntervals').textContent = '0';
+        $('kpiIdleKept').textContent = '0:00:00';
+        $('kpiIdleDisc').textContent = '0:00:00';
+        $('kpiWarnings').textContent = '0';
+        $('intervalsBody').innerHTML = '';
+        $('eventsBody').innerHTML = '';
+        $('warningsList').innerHTML = '<li style="color:var(--muted)">No warnings</li>';
+        $('timelineSection').classList.remove('visible');
+        return;
+      }
+      
+      const total = data.intervals.reduce((s,i) => s + i.secs, 0);
+      $('kpiTotal').textContent = fmtTime(total);
+      $('kpiIntervals').textContent = data.intervals.length;
+      $('kpiIdleKept').textContent = fmtTime(data.idleKept);
+      $('kpiIdleDisc').textContent = fmtTime(data.idleDisc);
+      $('kpiWarnings').textContent = data.warns.length;
+      
+      // Intervals table
+      $('intervalsBody').innerHTML = data.intervals.map((it, i) => {
+        const stopCls = it.stopReason === 'USER' ? 'ok' : it.stopReason === 'IDLE' ? 'warn' : it.stopReason === 'SHUTDOWN' ? 'ok' : it.stopReason === 'CONFIGURATION' ? 'danger' : it.stopReason === 'PROJECT_CONFIGURATION_LOCATION' ? 'danger' : 'danger';
+        const startCls = it.startReason === 'RESUMED' ? 'resume' : it.startReason === 'IDLE' ? 'warn' : 'ok';
+        const isRecovered = it.startReason === 'RESUMED';
+        const rowStyle = isRecovered ? 'background: rgba(129,140,248,0.1);' : '';
+        const recoveredBadge = isRecovered ? ' <span class="tag resume">RECOVERED</span>' : '';
+        return `<tr id="row-${i}" style="${rowStyle}"><td>${i+1}${recoveredBadge}</td><td><span class="time-link" data-ts="${it.start.toISOString()}">${it.start.toLocaleTimeString()}</span></td><td><span class="time-link" data-ts="${it.stop.toISOString()}">${it.stop.toLocaleTimeString()}</span></td><td><span class="tag ok">${fmtTime(it.secs)}</span></td><td><span class="tag ${stopCls}">${it.stopReason}</span></td></tr>`;
+      }).join('');
+      
+      // Add click handlers to time links
+      $('intervalsBody').querySelectorAll('.time-link').forEach(el => {
+        el.addEventListener('click', () => snapToTime(el.dataset.ts));
+      });
+      
+      // Events table - include crash warnings as events
+      const crashWarns = data.warns.filter(w => w.type && w.type.startsWith('CRASH_'));
+      const allEventsForTable = [...data.events];
+      
+      // Add crash warnings as synthetic events
+      crashWarns.forEach(w => {
+        allEventsForTable.push({
+          ts: w.time,
+          type: w.type,
+          plain: w.type === 'CRASH_RECOVERED' 
+            ? `✅ App crashed but time was recovered successfully` 
+            : w.type === 'CRASH_TIME_LOST'
+            ? `⚠️ App crashed - some time may have been lost`
+            : w.type === 'CRASH_NO_TRACKING'
+            ? `ℹ️ App crashed but user wasn't tracking`
+            : w.msg,
+          isCrashEvent: true,
+          recovered: w.recovered,
+          lost: w.lost
+        });
+      });
+      
+      // Sort by time
+      allEventsForTable.sort((a, b) => a.ts - b.ts);
+      
+      $('eventsBody').innerHTML = allEventsForTable.map(e => {
+        let cls = 'tag';
+        let detail = plain && e.plain ? e.plain : e.type;
+        let rowStyle = '';
+        
+        if (e.isCrashEvent) {
+          if (e.type === 'CRASH_RECOVERED') {
+            cls += ' ok';
+            rowStyle = 'background: rgba(34,197,94,0.15);';
+            if (plain && e.recovered) detail = `✅ App crashed but recovered ${fmtTime(e.recovered)} of tracking time`;
+          } else if (e.type === 'CRASH_TIME_LOST') {
+            cls += ' danger';
+            rowStyle = 'background: rgba(239,68,68,0.15);';
+            if (plain && e.lost) detail = `⚠️ App crashed - potentially lost ~${fmtTime(e.lost)}. Check dashboard.`;
+          } else {
+            cls += ' warn';
+            rowStyle = 'background: rgba(245,158,11,0.1);';
+          }
+        }
+        else if (e.type.includes('IDLE')) cls += ' warn';
+        else if (e.type === 'STARTUP_UNCLEAN' || e.type === 'SENTRY') { 
+          cls += ' danger'; 
+          rowStyle = 'background: rgba(239,68,68,0.1);';
+          if (plain) detail = '⚠️ ' + detail;
+        }
+        else if (e.type === 'RESUME_DETECTED') { 
+          cls += ' resume'; 
+          rowStyle = 'background: rgba(129,140,248,0.1);';
+          if (plain && e.resumeStart) {
+            const recoveredSecs = (e.ts - e.resumeStart) / 1000;
+            detail = `✅ Recovered ${fmtTime(recoveredSecs)} of tracking time (from ${e.resumeStart.toLocaleTimeString()})`;
+          }
+        }
+        else if (e.type === 'RESUME_IGNORED') {
+          cls += ' warn';
+          rowStyle = 'background: rgba(245,158,11,0.1);';
+          if (plain) detail = '⚠️ Previous session too old - time could not be recovered';
+        }
+        else if (e.type.includes('CLEAN') || e.type === 'SHUTDOWN') cls += ' ok';
+        
+        return `<tr style="${rowStyle}"><td>${e.ts.toLocaleTimeString()}</td><td><span class="${cls}">${e.type}</span></td><td style="color:var(--muted);font-size:11px;">${detail}</td></tr>`;
+      }).join('');
+      
+      // Warnings
+      if (data.warns.length) {
+        $('warningsList').innerHTML = data.warns.map(w => {
+          let msg, cls = '';
+          const hasLearnMore = ['QUICK_STARTSTOP', 'CRASH_RECOVERED', 'CRASH_TIME_LOST', 'CRASH_NO_TRACKING', 'UNCLOSED', 'UNMATCHED', 'STOPPED_BY_CONFIG'].includes(w.type);
+          const learnMoreBtn = hasLearnMore ? `<button class="learn-more-btn" data-type="${w.type}">Learn more</button>` : '';
+          
+          if (plain) {
+            if (w.type === 'UNCLOSED') msg = 'Timer started but never stopped - likely a crash or still running.';
+            else if (w.type === 'UNMATCHED') msg = 'Stop found without matching start - log may be incomplete.';
+            else if (w.type === 'QUICK_STARTSTOP') msg = `⚡ User likely double-clicked the record button at ${w.time.toLocaleTimeString()} - timer started and stopped almost instantly.`;
+            else if (w.type === 'CRASH_RECOVERED') { msg = `✅ App crashed at ${w.time.toLocaleTimeString()} but time was recovered successfully.`; cls = 'color:var(--accent)'; }
+            else if (w.type === 'CRASH_TIME_LOST') { msg = `⚠️ App crashed at ${w.time.toLocaleTimeString()} - some time may have been lost. Check the dashboard to confirm.`; cls = 'color:var(--warn)'; }
+            else if (w.type === 'CRASH_NO_TRACKING') msg = `ℹ️ App crashed at ${w.time.toLocaleTimeString()} but user wasn't tracking, so no time was lost.`;
+            else msg = w.msg;
+          } else {
+            msg = w.msg;
+          }
+          return `<li style="${cls}"><span>${msg}</span>${learnMoreBtn}</li>`;
+        }).join('');
+      } else {
+        $('warningsList').innerHTML = '<li style="color:var(--muted)">No warnings</li>';
+      }
+      
+      // Add click handlers for learn more buttons
+      $('warningsList').querySelectorAll('.learn-more-btn').forEach(btn => {
+        btn.addEventListener('click', () => showLearnMore(btn.dataset.type));
+      });
+      
+      renderTimeline(data);
+    }
+    
+    function renderTimeline(data) {
+      const all = [...data.intervals, ...data.discarded];
+      if (!all.length) { $('timelineSection').classList.remove('visible'); return; }
+      
+      let min = new Date(8640000000000000), max = new Date(-8640000000000000);
+      all.forEach(i => { if (i.start < min) min = i.start; if (i.stop > max) max = i.stop; });
+      data.allEvents.forEach(e => { if (e.ts < min) min = e.ts; if (e.ts > max) max = e.ts; });
+      
+      min = new Date(min.getTime() - 5*60000);
+      max = new Date(max.getTime() + 5*60000);
+      timelineMin = min;
+      timelineDur = max - min;
+      
+      const pos = t => ((t - min) / timelineDur) * 100;
+      
+      // Main track - intervals
+      let mainHTML = '';
+      data.intervals.forEach((it, idx) => {
+        const left = pos(it.start), width = Math.max(pos(it.stop) - left, 0.3);
+        const next = data.intervals[idx + 1];
+        const touching = next && (next.start - it.stop) < 2000;
+        mainHTML += `<div class="t-block ${it.startReason}" data-idx="${idx}" data-touching="${touching}" style="left:${left}%;width:${width}%"></div>`;
+      });
+      
+      // Discarded
+      data.discarded.forEach(d => {
+        const left = pos(d.start), width = Math.max(pos(d.stop) - left, 0.3);
+        mainHTML += `<div class="t-block DISCARDED" data-type="discarded" data-secs="${d.secs}" data-start="${d.start.toLocaleTimeString()}" data-stop="${d.stop.toLocaleTimeString()}" style="left:${left}%;width:${width}%"></div>`;
+      });
+      
+      $('trackMain').innerHTML = mainHTML;
+      
+      // Events track
+      let eventsHTML = '';
+      data.allEvents.filter(e => ['STARTUP_CLEAN','STARTUP_UNCLEAN','SHUTDOWN','SENTRY'].includes(e.type)).forEach(e => {
+        let cls = 'shutdown', char = '●';
+        if (e.type === 'STARTUP_CLEAN') cls = 'clean';
+        else if (e.type === 'STARTUP_UNCLEAN') { cls = 'crash'; char = '✖'; }
+        else if (e.type === 'SENTRY') cls = 'crash';
+        eventsHTML += `<div class="t-marker ${cls}" data-event="${e.type}" data-time="${e.ts.toLocaleTimeString()}" data-plain="${e.plain}" style="left:${pos(e.ts)}%">${char}</div>`;
+      });
+      
+      $('trackEvents').innerHTML = eventsHTML;
+      $('timelineSection').classList.add('visible');
+      
+      // Add click handlers to blocks
+      $('trackMain').querySelectorAll('.t-block').forEach(el => {
+        el.addEventListener('click', e => {
+          e.stopPropagation();
+          if (selectedEl === el) { hideInfoBox(); return; }
+          
+          hideInfoBox();
+          selectedEl = el;
+          el.classList.add('selected');
+          
+          const idx = el.dataset.idx;
+          if (idx !== undefined) {
+            const it = data.intervals[parseInt(idx)];
+            const row = $('row-' + idx);
+            if (row) row.classList.add('highlight');
+            
+            let content = `<p><span class="label">Start:</span> ${it.start.toLocaleTimeString()}</p>`;
+            content += `<p><span class="label">Stop:</span> ${it.stop.toLocaleTimeString()}</p>`;
+            content += `<p><span class="label">Duration:</span> ${fmtTime(it.secs)}</p>`;
+            content += `<p><span class="label">Started by:</span> ${it.startReason}</p>`;
+            content += `<p><span class="label">Stopped by:</span> ${it.stopReason}</p>`;
+            if (el.dataset.touching === 'true') {
+              content += `<span class="touch-link" id="touchLink">Why are these bars touching?</span>`;
+            }
+            
+            showInfoBox(e, 'Tracking Interval', content);
+            
+            if (el.dataset.touching === 'true') {
+              $('touchLink')?.addEventListener('click', () => $('touchModal').classList.add('visible'));
+            }
+          } else if (el.dataset.type === 'discarded') {
+            let content = `<p><span class="label">Start:</span> ${el.dataset.start}</p>`;
+            content += `<p><span class="label">Stop:</span> ${el.dataset.stop}</p>`;
+            content += `<p><span class="label">Duration:</span> ${fmtTime(parseInt(el.dataset.secs))}</p>`;
+            content += `<p><span class="label">Type:</span> Discarded idle time</p>`;
+            showInfoBox(e, 'Discarded Time', content);
+          }
+        });
+      });
+      
+      // Add click handlers to markers
+      $('trackEvents').querySelectorAll('.t-marker').forEach(el => {
+        el.addEventListener('click', e => {
+          e.stopPropagation();
+          if (selectedEl === el) { hideInfoBox(); return; }
+          
+          hideInfoBox();
+          selectedEl = el;
+          el.classList.add('selected');
+          
+          const plain = $('plainMode').checked;
+          const content = `<p><span class="label">Event:</span> ${el.dataset.event}</p><p><span class="label">Time:</span> ${el.dataset.time}</p><p>${plain ? el.dataset.plain : ''}</p>`;
+          showInfoBox(e, 'App Event', content);
+        });
+      });
+    }
+    
+    // Event listeners
+    $('analyzeBtn').onclick = () => {
+      result = analyze($('logInput').value);
+      $('status').textContent = result ? `Found ${result.allEvents.length} events` : 'No valid events found';
+      $('status').className = 'status ' + (result ? 'success' : 'error');
+      render(result);
+      hideInfoBox();
+    };
+    
+    $('clearBtn').onclick = () => {
+      // Securely clear all data
+      $('logInput').value = '';
+      $('status').textContent = '';
+      
+      // Clear the result object
+      if (result) {
+        // Overwrite arrays with empty arrays
+        if (result.intervals) result.intervals.length = 0;
+        if (result.discarded) result.discarded.length = 0;
+        if (result.warns) result.warns.length = 0;
+        if (result.events) result.events.length = 0;
+        if (result.allEvents) result.allEvents.length = 0;
+      }
+      result = null;
+      
+      // Clear timeline state
+      timelineMin = null;
+      timelineDur = null;
+      focusRatio = null;
+      selectedEl = null;
+      
+      // Clear rendered content
+      render(null);
+      hideInfoBox();
+      
+      // Show confirmation
+      $('status').textContent = '🔒 All data cleared from memory';
+      $('status').className = 'status success';
+      setTimeout(() => { $('status').textContent = ''; }, 3000);
+      
+      // Force garbage collection hint (browser may or may not act on this)
+      if (window.gc) window.gc();
+    };
+    
+    $('plainMode').onchange = () => render(result);
+    
+    $('sampleBtn').onclick = () => {
+      $('logInput').value = `2025-11-07 09:00:00 +0000 [AUDIT] (STARTUP_CLEAN) Startup
+2025-11-07 09:05:00 +0000 [AUDIT] (START_TRACKING) Tracking Started: [Project:0] by [USER]
+2025-11-07 09:30:00 +0000 [AUDIT] (STOP_TRACKING) Tracking Stopped: [Project:0] by [USER]
+2025-11-07 10:00:00 +0000 [AUDIT] (START_TRACKING) Tracking Started: [Project:0] by [USER]
+2025-11-07 10:00:02 +0000 [AUDIT] (STOP_TRACKING) Tracking Stopped: [Project:0] by [USER]
+2025-11-07 10:01:00 +0000 [AUDIT] (START_TRACKING) Tracking Started: [Project:0] by [USER]
+2025-11-07 10:30:00 +0000 [AUDIT] (IDLE) User went idle for 300 seconds
+2025-11-07 10:35:00 +0000 [AUDIT] (IDLE_WAKE) User returned after 300 seconds
+2025-11-07 10:35:10 +0000 [AUDIT] (IDLE_ANSWER) KeepIdle: 1 StopTracking: 0
+2025-11-07 11:00:00 +0000 [AUDIT] (STOP_TRACKING) Tracking Stopped: [Project:0] by [USER]
+2025-11-07 11:30:00 +0000 [AUDIT] (START_TRACKING) Tracking Started: [Project:0] by [USER]
+2025-11-07 12:15:00 +0000 [AUDIT] (STARTUP_UNCLEAN) Startup
+2025-11-07 12:15:01 +0000 [AUDIT] (RESUME_DETECTED) Detected resume. Start time: 2025-11-07 11:30:00 Duration: 0:45:00
+2025-11-07 12:15:02 +0000 [AUDIT] (START_TRACKING) Tracking Started: [Project:0] by [RESUMED]
+2025-11-07 13:00:00 +0000 [AUDIT] (STOP_TRACKING) Tracking Stopped: [Project:0] by [USER]
+2025-11-07 13:01:00 +0000 [AUDIT] (SHUTDOWN) Shutdown client`;
+      $('analyzeBtn').click();
+    };
+    
+    $('sampleLostBtn').onclick = () => {
+      $('logInput').value = `2025-11-07 09:00:00 +0000 [AUDIT] (STARTUP_CLEAN) Startup
+2025-11-07 09:05:00 +0000 [AUDIT] (START_TRACKING) Tracking Started: [Project:0] by [USER]
+2025-11-07 09:30:00 +0000 [AUDIT] (STOP_TRACKING) Tracking Stopped: [Project:0] by [USER]
+2025-11-07 10:00:00 +0000 [AUDIT] (START_TRACKING) Tracking Started: [Project:0] by [USER]
+2025-11-07 12:30:00 +0000 [AUDIT] (STARTUP_UNCLEAN) Startup
+2025-11-07 12:30:01 +0000 [AUDIT] (RESUME_IGNORED) Duration > 1 hours. Not auto resuming tracking. StartTime: 2025-11-07 10:00:00
+2025-11-07 13:00:00 +0000 [AUDIT] (START_TRACKING) Tracking Started: [Project:0] by [USER]
+2025-11-07 14:00:00 +0000 [AUDIT] (STOP_TRACKING) Tracking Stopped: [Project:0] by [USER]
+2025-11-07 14:01:00 +0000 [AUDIT] (SHUTDOWN) Shutdown client`;
+      $('analyzeBtn').click();
+    };
+    
+    // Zoom controls
+    $('zoomSlider').oninput = function() {
+      const content = $('timelineContent');
+      const container = $('timelineContainer');
+      content.style.width = (this.value * 100) + '%';
+      if (focusRatio !== null) {
+        container.scrollLeft = content.offsetWidth * focusRatio - container.offsetWidth / 2;
+      }
+    };
+    
+    $('resetZoom').onclick = () => {
+      $('zoomSlider').value = 1;
+      $('timelineContent').style.width = '100%';
+      $('timelineContainer').scrollLeft = 0;
+      $('timelineCursor').style.display = 'none';
+      focusRatio = null;
+      hideInfoBox();
+    };
+    
+    // Timeline click for cursor
+    $('timelineContainer').onclick = e => {
+      if (e.target.classList.contains('t-block') || e.target.classList.contains('t-marker')) return;
+      hideInfoBox();
+      
+      const content = $('timelineContent');
+      const rect = content.getBoundingClientRect();
+      focusRatio = (e.clientX - rect.left) / rect.width;
+      
+      const cursor = $('timelineCursor');
+      cursor.style.display = 'block';
+      cursor.style.left = (focusRatio * 100) + '%';
+    };
+    
+    // Close info box on outside click
+    document.addEventListener('click', e => {
+      if (!e.target.closest('.info-box') && !e.target.closest('.t-block') && !e.target.closest('.t-marker')) {
+        hideInfoBox();
+      }
+    });
+    
+    // Modals
+    $('helpBtn').onclick = () => $('helpModal').classList.add('visible');
+    $('closeHelp').onclick = () => $('helpModal').classList.remove('visible');
+    $('helpModal').onclick = e => { if (e.target === $('helpModal')) $('helpModal').classList.remove('visible'); };
+    
+    $('closeLearnMore').onclick = () => $('learnMoreModal').classList.remove('visible');
+    $('learnMoreModal').onclick = e => { if (e.target === $('learnMoreModal')) $('learnMoreModal').classList.remove('visible'); };
+    
+    $('closeTouchModal').onclick = () => $('touchModal').classList.remove('visible');
+    $('touchModal').onclick = e => { if (e.target === $('touchModal')) $('touchModal').classList.remove('visible'); };
+    
+    // Learn more content for each warning type
+    const learnMoreData = {
+      'QUICK_STARTSTOP': {
+        title: '⚡ Quick Start/Stop (Double-Click)',
+        content: `
+          <h3>What happened?</h3>
+          <p>The user started and stopped the timer within a few seconds. This is almost always an accidental double-click on the record button.</p>
+          
+          <h3>Likely causes</h3>
+          <ul>
+            <li><strong>Accidental double-click</strong> - User clicked the button twice quickly</li>
+            <li><strong>Laggy interface</strong> - App was slow to respond, so user clicked again</li>
+            <li><strong>Touchpad sensitivity</strong> - Trackpad registered multiple taps</li>
+          </ul>
+          
+          <h3>What to tell the customer</h3>
+          <p>The logs show the timer was started and stopped within a few seconds at [TIME]. This typically happens when the record button is clicked twice quickly. The user may not have noticed this happened.</p>
+          
+          <h3>Resolution</h3>
+          <p>No action needed - this explains why time wasn't tracked. The user simply needs to click the record button once to start tracking.</p>
+        `
+      },
+      'CRASH_RECOVERED': {
+        title: '✅ Crash Recovered Successfully',
+        content: `
+          <h3>What happened?</h3>
+          <p>The app crashed or was force-closed while the user was tracking time, but when it restarted, it successfully recovered the tracking session.</p>
+          
+          <h3>What this means</h3>
+          <ul>
+            <li><strong>No time was lost</strong> - The resume feature worked correctly</li>
+            <li><strong>Time was preserved</strong> - The original start time was restored</li>
+            <li><strong>Tracking continued</strong> - User could continue where they left off</li>
+          </ul>
+          
+          <h3>Likely causes of the crash</h3>
+          <ul>
+            <li>System ran out of memory</li>
+            <li>Operating system update forced restart</li>
+            <li>Power failure or laptop battery died</li>
+            <li>User accidentally force-quit the app</li>
+            <li>App bug (check for Sentry events)</li>
+          </ul>
+          
+          <h3>What to tell the customer</h3>
+          <p>Good news! Although the app crashed at [TIME], the time was automatically recovered. No tracking time was lost.</p>
+        `
+      },
+      'CRASH_TIME_LOST': {
+        title: '⚠️ Crash - Time May Be Lost',
+        content: `
+          <h3>What happened?</h3>
+          <p>The app crashed while the user was tracking, and the time could not be automatically recovered.</p>
+          
+          <h3>Why wasn't time recovered?</h3>
+          <ul>
+            <li><strong>Too much time passed</strong> - If more than 1 hour passed (desktop) or 8 hours (mobile) before the app restarted, the session is considered too old</li>
+            <li><strong>Resume data corrupted</strong> - The saved session data may have been damaged</li>
+            <li><strong>App reinstalled</strong> - Reinstalling the app clears saved session data</li>
+          </ul>
+          
+          <h3>What to check</h3>
+          <ol>
+            <li><strong>Check the dashboard</strong> - Some time may have been uploaded before the crash</li>
+            <li><strong>Look for activity data</strong> - Check if any 10-minute slots were saved</li>
+            <li><strong>Calculate the gap</strong> - Time between last successful upload and crash</li>
+          </ol>
+          
+          <h3>What to tell the customer</h3>
+          <p>The app crashed at [TIME] while tracking was active. Unfortunately, the tracking session couldn't be automatically recovered because [REASON]. Some time may have been saved before the crash - please check your dashboard. Any missing time would need to be added manually.</p>
+          
+          <h3>Prevention</h3>
+          <p>Share article: <em>Computer shutdown, crash and power outages while tracking time</em></p>
+        `
+      },
+      'CRASH_NO_TRACKING': {
+        title: 'ℹ️ Crash - No Time Lost',
+        content: `
+          <h3>What happened?</h3>
+          <p>The app crashed or was force-closed, but the user wasn't actively tracking time at that moment.</p>
+          
+          <h3>What this means</h3>
+          <ul>
+            <li><strong>No time was lost</strong> - User wasn't tracking when crash occurred</li>
+            <li><strong>No action needed</strong> - This is informational only</li>
+          </ul>
+          
+          <h3>Likely causes</h3>
+          <ul>
+            <li>System restart or update</li>
+            <li>User force-quit the app</li>
+            <li>App bug while idle</li>
+          </ul>
+          
+          <h3>What to tell the customer</h3>
+          <p>The app did restart unexpectedly at [TIME], but you weren't tracking time at that moment, so no time was lost.</p>
+        `
+      },
+      'UNCLOSED': {
+        title: '🔴 Unclosed Start (No Stop Found)',
+        content: `
+          <h3>What happened?</h3>
+          <p>The logs show a START_TRACKING event without a matching STOP_TRACKING event.</p>
+          
+          <h3>Likely causes</h3>
+          <ul>
+            <li><strong>App crashed</strong> - Most common cause. Look for STARTUP_UNCLEAN after this</li>
+            <li><strong>Still tracking</strong> - The timer might still be running right now</li>
+            <li><strong>Incomplete logs</strong> - The log file may have been cut off or rotated</li>
+            <li><strong>System shutdown</strong> - Computer was shut down without closing the app properly</li>
+          </ul>
+          
+          <h3>What to check</h3>
+          <ol>
+            <li>Is there a STARTUP_UNCLEAN event after this? (indicates crash)</li>
+            <li>Is there a RESUME_DETECTED event? (time may have been recovered)</li>
+            <li>Are the logs complete? Request fresh logs if needed</li>
+            <li>Check if the user is currently tracking</li>
+          </ol>
+          
+          <h3>What to tell the customer</h3>
+          <p>The logs show tracking started at [TIME] but no stop event was recorded. This usually means the app crashed. Let me check if the time was recovered...</p>
+        `
+      },
+      'UNMATCHED': {
+        title: '🟡 Unmatched Stop',
+        content: `
+          <h3>What happened?</h3>
+          <p>The logs show a STOP_TRACKING event without a matching START_TRACKING event before it.</p>
+          
+          <h3>Likely causes</h3>
+          <ul>
+            <li><strong>Incomplete logs</strong> - The START event may be in an older log file that wasn't included</li>
+            <li><strong>Log rotation</strong> - hubstaff.log files rotate when they get too large, older events may be lost</li>
+            <li><strong>Logs requested too late</strong> - The relevant log entries may have been deleted</li>
+          </ul>
+          
+          <h3>What to check</h3>
+          <ol>
+            <li>Do you have all the log files? (hubstaff.log, hubstaff.1, hubstaff.2, etc.)</li>
+            <li>Request fresh logs closer to when the issue occurred</li>
+            <li>Check the audit.log specifically - it's more compact</li>
+          </ol>
+          
+          <h3>What to tell the customer</h3>
+          <p>The log file appears to be incomplete - I can see when tracking stopped but not when it started. Could you reproduce the issue and send fresh logs right after it happens?</p>
+        `
+      },
+      'STOPPED_BY_CONFIG': {
+        title: '⚙️ Tracking Stopped by Configuration',
+        content: `
+          <h3>What happened?</h3>
+          <p>The timer was automatically stopped by the system due to a configuration setting or limit being reached. The user did not manually stop tracking.</p>
+          
+          <h3>Likely causes</h3>
+          <ul>
+            <li><strong>User was removed from project</strong> - An admin removed the user from the project they were tracking to</li>
+            <li><strong>Project time tracking limit reached</strong> - The project has a maximum hours limit that was hit</li>
+            <li><strong>Project budget reached</strong> - The project's budget allocation has been exhausted</li>
+            <li><strong>Weekly time limit reached</strong> - The user's weekly tracking limit was reached</li>
+            <li><strong>Daily time limit reached</strong> - The user's daily tracking limit was reached</li>
+          </ul>
+          
+          <h3>What to check</h3>
+          <ol>
+            <li><strong>Project membership</strong> - Is the user still a member of the project?</li>
+            <li><strong>Project limits</strong> - Check project settings for any time/budget limits</li>
+            <li><strong>User limits</strong> - Check if the user has weekly/daily limits configured</li>
+            <li><strong>Organization settings</strong> - Check for any organization-wide limits</li>
+          </ol>
+          
+          <h3>What to tell the customer</h3>
+          <p>The logs show that tracking was automatically stopped at [TIME] due to a system configuration. This typically happens when a time limit or budget has been reached, or if there was a change to project membership. Let me check your account settings to identify the specific cause...</p>
+          
+          <h3>Resolution</h3>
+          <ul>
+            <li>If limit reached: Admin can adjust or reset the limit</li>
+            <li>If removed from project: Admin needs to re-add user to the project</li>
+            <li>If budget reached: Admin needs to increase budget or move to a new budget period</li>
+          </ul>
+        `
+      },
+      'LEFT_JOBSITE': {
+        title: '📍 Left Required Job Site',
+        content: `
+          <h3>What happened?</h3>
+          <p>Tracking was automatically stopped because the user left a Job Site that is required for the project they were tracking to.</p>
+          
+          <h3>How Job Sites work</h3>
+          <ul>
+            <li>Some projects require users to be physically at a specific location (Job Site) to track time</li>
+            <li>The app uses GPS/location services to detect when the user enters or exits the Job Site</li>
+            <li>If the user leaves the Job Site boundary, tracking automatically stops</li>
+          </ul>
+          
+          <h3>Likely causes</h3>
+          <ul>
+            <li><strong>User physically left the location</strong> - They drove/walked away from the Job Site</li>
+            <li><strong>GPS drift</strong> - Poor GPS signal caused the phone to think they left</li>
+            <li><strong>Job Site radius too small</strong> - The geofence boundary is set too tight</li>
+            <li><strong>Location permissions changed</strong> - User may have revoked location access</li>
+          </ul>
+          
+          <h3>What to check</h3>
+          <ol>
+            <li>Was the user actually at the Job Site when tracking stopped?</li>
+            <li>Check the Job Site radius settings - is it large enough?</li>
+            <li>Check device location permissions</li>
+            <li>Look for <code>LOCATIONS_STATUS</code> events in the logs</li>
+          </ol>
+          
+          <h3>What to tell the customer</h3>
+          <p>The logs show tracking stopped at [TIME] because the app detected you left the required Job Site. If you were still physically at the location, this could be due to GPS signal issues. Check that location services are enabled and try moving to an area with better GPS reception.</p>
+        `
+      },
+      'DISCARD': {
+        title: '🔴 Time Rejected by Server',
+        content: `
+          <h3>What happened?</h3>
+          <p>The Hubstaff server rejected time that the app tried to upload. This means the tracked time will NOT appear in reports/dashboard.</p>
+          
+          <h3>Common reasons (Discard=1)</h3>
+          <ul>
+            <li><strong>Timesheet is locked</strong> - The timesheet for this period has been approved and cannot be edited</li>
+            <li><strong>Time slot in the future</strong> - The computer's clock was set incorrectly (ahead of real time)</li>
+            <li><strong>Duplicate record</strong> - This time was already uploaded previously</li>
+            <li><strong>Tracked is too large</strong> - A time slot exceeded 10 minutes (should never happen normally)</li>
+          </ul>
+          
+          <h3>What to check</h3>
+          <ol>
+            <li>Look at the specific <code>Discard=1 message:</code> in the logs for the exact reason</li>
+            <li>Check if the timesheet for that date is locked/approved</li>
+            <li>Verify the user's computer clock is set correctly</li>
+            <li>Check the dashboard to see what time actually recorded</li>
+          </ol>
+          
+          <h3>What to tell the customer</h3>
+          <p>The server rejected some tracked time because [REASON]. Unfortunately, discarded time cannot be recovered automatically. The user may need to add this time manually if their timesheet is not locked.</p>
+          
+          <h3>Prevention</h3>
+          <ul>
+            <li>Ensure computer clock is set to automatic</li>
+            <li>Submit timesheets before approval deadlines</li>
+            <li>Check for the timezone mismatch error article</li>
+          </ul>
+        `
+      },
+      'NETWORK_ERROR': {
+        title: '🌐 Network Error',
+        content: `
+          <h3>What happened?</h3>
+          <p>The app could not connect to Hubstaff servers to upload tracking data.</p>
+          
+          <h3>Likely causes</h3>
+          <ul>
+            <li><strong>No internet connection</strong> - WiFi/ethernet disconnected</li>
+            <li><strong>Firewall blocking</strong> - Corporate firewall blocking Hubstaff</li>
+            <li><strong>Antivirus interference</strong> - Security software blocking the connection</li>
+            <li><strong>Server outage</strong> - Hubstaff servers temporarily unavailable</li>
+            <li><strong>VPN issues</strong> - VPN causing connection problems</li>
+          </ul>
+          
+          <h3>What this means for tracked time</h3>
+          <p>The app queues data locally when network errors occur. Once connection is restored, it should upload automatically. However, if the app crashes before uploading, some data could be lost.</p>
+          
+          <h3>What to check</h3>
+          <ol>
+            <li>Did the time eventually appear in the dashboard?</li>
+            <li>Were there many network errors in a row?</li>
+            <li>Is there a firewall or antivirus that might block Hubstaff?</li>
+          </ol>
+          
+          <h3>What to tell the customer</h3>
+          <p>The logs show network errors at [TIME] which prevented data from uploading immediately. The app normally retries automatically. Please check if the time eventually appeared in your dashboard. If not, there may be a firewall or network issue preventing connection to Hubstaff servers.</p>
+        `
+      },
+      'INJECTED_INPUT': {
+        title: '⚠️ Injected Input Detected',
+        content: `
+          <h3>What happened?</h3>
+          <p>The app detected that keyboard/mouse input came from an "injected" source rather than actual physical input devices.</p>
+          
+          <h3>What "injected input" means</h3>
+          <p>Windows can detect when input comes from:</p>
+          <ul>
+            <li><strong>Real input (R)</strong> - Actual keyboard/mouse from the user</li>
+            <li><strong>Injected input (I)</strong> - Software-generated input from any process</li>
+            <li><strong>Low-integrity injected (LI)</strong> - Input from unverified/untrusted sources</li>
+          </ul>
+          
+          <h3>Possible causes</h3>
+          <ul>
+            <li><strong>Legitimate software</strong> - Remote desktop, accessibility tools, automation software</li>
+            <li><strong>Hardware issues</strong> - Faulty USB port or device causing false signals</li>
+            <li><strong>Activity simulation</strong> - Software designed to fake activity (cheating)</li>
+            <li><strong>Mouse/keyboard software</strong> - Gaming mice/keyboards with macro features</li>
+          </ul>
+          
+          <h3>What to check</h3>
+          <ol>
+            <li>Is the user using remote desktop or screen sharing?</li>
+            <li>Do they have accessibility software installed?</li>
+            <li>Is this happening consistently or occasionally?</li>
+            <li>Check the activity percentages - are they unusually high?</li>
+          </ol>
+          
+          <h3>Important note</h3>
+          <p>Injected input is NOT automatically cheating. Many legitimate tools inject input. Look for patterns like: consistently 100% activity, same screenshots repeating, injected input with no real input at all.</p>
+          
+          <h3>What to tell the customer</h3>
+          <p>The logs show some activity was detected as "injected" rather than direct keyboard/mouse input. This can happen with remote desktop software, accessibility tools, or certain hardware. If you're using any such software, this is expected behavior.</p>
+        `
+      },
+      'SIMULATED_INPUT': {
+        title: '⚠️ Simulated Input',
+        content: `
+          <h3>What happened?</h3>
+          <p>The app detected that input occurred but couldn't determine the exact source, so it "simulated" that input was received.</p>
+          
+          <h3>Why this happens</h3>
+          <p>On Windows, there are multiple ways to detect input. When the highly accurate method doesn't see input, but the OS reports activity occurred, the app simulates that both mouse and keyboard input happened.</p>
+          
+          <h3>Common causes</h3>
+          <ul>
+            <li><strong>Skype video calls</strong> - Skype can interfere with input detection</li>
+            <li><strong>Certain applications</strong> - Some apps don't report input normally</li>
+            <li><strong>Driver issues</strong> - Input device drivers not reporting correctly</li>
+          </ul>
+          
+          <h3>Is this cheating?</h3>
+          <p><strong>Usually no.</strong> Simulated input is the app compensating for detection limitations, not evidence of fake activity. It means "we know something happened but couldn't see exactly what."</p>
+          
+          <h3>What to tell the customer</h3>
+          <p>The logs show some input was detected indirectly. This is usually caused by certain applications interfering with activity detection and is not a cause for concern. The activity was still real - the app just couldn't determine if it was keyboard or mouse.</p>
+        `
+      },
+      'SCREEN_LOCKED': {
+        title: '🔒 Screen Locked / Screensaver Active',
+        content: `
+          <h3>What happened?</h3>
+          <p>The app detected that the computer screen was locked or the screensaver was active, so it discarded any input signals during this time.</p>
+          
+          <h3>Why input is discarded</h3>
+          <p>When the screen is locked, any detected "input" is likely false signals (not real user activity), so the app ignores it to maintain accurate activity tracking.</p>
+          
+          <h3>Impact on tracking</h3>
+          <ul>
+            <li>Time may still be tracked (if timer was running)</li>
+            <li>Activity percentage will be 0% during locked period</li>
+            <li>This may trigger idle detection if locked for too long</li>
+          </ul>
+          
+          <h3>What to tell the customer</h3>
+          <p>The logs show the screen was locked or screensaver was active at [TIME]. During this time, activity is recorded as 0% because you weren't actively using the computer. If the idle timeout was reached, you would have seen the idle prompt when you returned.</p>
+        `
+      },
+      'LOCATION_DENIED': {
+        title: '📍 Location Permissions Denied',
+        content: `
+          <h3>What happened?</h3>
+          <p>The device's location permissions for Hubstaff were denied or restricted.</p>
+          
+          <h3>Impact</h3>
+          <ul>
+            <li><strong>Job Sites won't work</strong> - App can't detect when user enters/exits locations</li>
+            <li><strong>Auto-start won't work</strong> - If project requires location, tracking can't start automatically</li>
+            <li><strong>May stop tracking</strong> - If currently tracking a location-required project</li>
+          </ul>
+          
+          <h3>Required permission level</h3>
+          <p>For Job Sites to work correctly, the app needs:</p>
+          <ul>
+            <li><strong>iOS:</strong> "Always" location permission</li>
+            <li><strong>Android:</strong> "Allow all the time" location permission</li>
+            <li><strong>Accuracy:</strong> Full/Precise (not approximate)</li>
+          </ul>
+          
+          <h3>What to check</h3>
+          <ol>
+            <li>Device Settings → Apps → Hubstaff → Permissions → Location</li>
+            <li>Ensure it's set to "Always" not "While using" or "Never"</li>
+            <li>Check that precise/accurate location is enabled</li>
+          </ol>
+          
+          <h3>What to tell the customer</h3>
+          <p>The logs show location permissions were denied or changed at [TIME]. For Job Sites to work, Hubstaff needs "Always" location permission. Please check your device settings and ensure location access is set to "Always" with precise accuracy enabled.</p>
+        `
+      }
+    };
+    
+    function showLearnMore(type) {
+      const data = learnMoreData[type];
+      if (!data) return;
+      
+      $('learnMoreTitle').textContent = data.title;
+      $('learnMoreContent').innerHTML = data.content;
+      $('learnMoreModal').classList.add('visible');
+    }
+    
+    $('privacyBtn').onclick = () => $('privacyModal').classList.add('visible');
+    $('closePrivacy').onclick = () => $('privacyModal').classList.remove('visible');
+    $('privacyModal').onclick = e => { if (e.target === $('privacyModal')) $('privacyModal').classList.remove('visible'); };
+    
+    // Clear data when page is closed/navigated away
+    window.addEventListener('beforeunload', () => {
+      $('logInput').value = '';
+      if (result) {
+        if (result.intervals) result.intervals.length = 0;
+        if (result.discarded) result.discarded.length = 0;
+        if (result.warns) result.warns.length = 0;
+        if (result.events) result.events.length = 0;
+        if (result.allEvents) result.allEvents.length = 0;
+      }
+      result = null;
+    });
+    
+    // Keyboard shortcut - Cmd/Ctrl + Enter to analyze
+    document.addEventListener('keydown', e => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+        e.preventDefault();
+        $('analyzeBtn').click();
+      }
+    });
+    
+    // Snap to time function
+    function snapToTime(isoString) {
+      if (!timelineMin || !timelineDur) return;
+      
+      const targetTime = new Date(isoString);
+      if (isNaN(targetTime.getTime())) return;
+      
+      const ratio = (targetTime - timelineMin) / timelineDur;
+      if (ratio < 0 || ratio > 1) return;
+      
+      focusRatio = ratio;
+      
+      // Zoom in to 10x
+      $('zoomSlider').value = 10;
+      const content = $('timelineContent');
+      const container = $('timelineContainer');
+      content.style.width = '1000%';
+      
+      // Show and position cursor
+      const cursor = $('timelineCursor');
+      cursor.style.display = 'block';
+      cursor.style.left = (ratio * 100) + '%';
+      
+      // Scroll to center on the cursor
+      container.scrollLeft = content.offsetWidth * ratio - container.offsetWidth / 2;
+      
+      // Flash effect
+      cursor.style.boxShadow = '0 0 15px 3px yellow';
+      setTimeout(() => { cursor.style.boxShadow = '0 0 6px var(--danger)'; }, 500);
+    }
+  </script>
+</body>
+</html>
