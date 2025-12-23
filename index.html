@@ -110,10 +110,20 @@
     .info-box .touch-link { color: var(--link); text-decoration: underline; cursor: pointer; font-size: 11px; margin-top: 8px; display: inline-block; }
 
     .warnings-list { list-style: none; padding-left: 0; }
-    .warnings-list li { padding: 10px 0; font-size: 12px; color: var(--text); border-bottom: 1px dashed var(--border); line-height: 1.6; }
-    .warnings-list li:last-child { border-bottom: none; }
+    .warnings-list li { padding: 10px 12px; font-size: 12px; color: var(--text); border-bottom: 1px dashed var(--border); line-height: 1.6; border-radius: 6px; margin-bottom: 4px; transition: background 0.15s; }
+    .warnings-list li:last-child { border-bottom: none; margin-bottom: 0; }
+    .warnings-list li.clickable { cursor: pointer; border-left: 3px solid var(--warn); padding-left: 10px; }
+    .warnings-list li.clickable:hover { background: rgba(245,158,11,0.1); }
+    .warnings-list li.danger-border { border-left-color: var(--danger); }
+    .warnings-list li.success-border { border-left-color: var(--accent); }
+    .warnings-list li.info-border { border-left-color: var(--muted); }
+    .warning-time { font-family: monospace; background: rgba(255,255,255,0.1); padding: 2px 6px; border-radius: 3px; font-size: 11px; margin-right: 8px; }
+    .warning-jump { font-size: 10px; color: var(--link); margin-left: 6px; opacity: 0.7; }
     .learn-more-btn { background: var(--link); border: none; color: #fff; padding: 3px 10px; border-radius: 4px; font-size: 11px; cursor: pointer; margin-left: 10px; vertical-align: middle; }
     .learn-more-btn:hover { background: #2563eb; }
+    tr.warning-highlight { animation: warningPulse 0.6s ease-out; }
+    @keyframes warningPulse { 0%, 100% { background: transparent; } 50% { background: rgba(245,158,11,0.4); } }
+    .interval-warning-icon { color: var(--warn); margin-left: 6px; cursor: help; font-size: 11px; }
 
     .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.75); z-index: 1001; align-items: center; justify-content: center; }
     .modal-overlay.visible { display: flex; }
@@ -672,14 +682,14 @@ if (type === 'START_TRACKING' || type === 'STOP_TRACKING') {
       for (let i = 0; i < intervals.length; i++) {
         const it = intervals[i];
         if (it.secs <= 5 && it.startReason === 'USER' && it.stopReason === 'USER') {
-          warns.push({ type: 'QUICK_STARTSTOP', msg: `Quick start/stop at ${fmtTimeWithTz(it.start)} (${Math.round(it.secs)}s) - likely accidental double-click`, time: it.start });
+          warns.push({ type: 'QUICK_STARTSTOP', msg: `Quick start/stop at ${fmtTimeWithTz(it.start)} (${Math.round(it.secs)}s) - likely accidental double-click`, time: it.start, intervalIdx: i });
         }
         if (it.stopReason === 'CONFIGURATION') {
-  warns.push({ type: 'STOPPED_BY_CONFIG', msg: `Tracking stopped by configuration at ${fmtTimeWithTz(it.stop)}`, time: it.stop });
-}
-if (it.stopReason === 'PROJECT_CONFIGURATION_URL') {
-  warns.push({ type: 'STOPPED_BY_URL_PERMISSION', msg: `Tracking stopped - URL permission not granted at ${fmtTimeWithTz(it.stop)}`, time: it.stop });
-}
+          warns.push({ type: 'STOPPED_BY_CONFIG', msg: `Tracking stopped by configuration at ${fmtTimeWithTz(it.stop)}`, time: it.stop, intervalIdx: i });
+        }
+        if (it.stopReason === 'PROJECT_CONFIGURATION_URL') {
+          warns.push({ type: 'STOPPED_BY_URL_PERMISSION', msg: `Tracking stopped - URL permission not granted at ${fmtTimeWithTz(it.stop)}`, time: it.stop, intervalIdx: i });
+        }
       }
 
       const crashes = events.filter(e => e.type === 'STARTUP_UNCLEAN');
@@ -777,7 +787,11 @@ if (it.stopReason === 'PROJECT_CONFIGURATION_URL') {
         const isRecovered = it.startReason === 'RESUMED';
         const rowStyle = isRecovered ? 'background: rgba(129,140,248,0.1);' : '';
         const recoveredBadge = isRecovered ? ' <span class="tag resume">RECOVERED</span>' : '';
-        return `<tr id="row-${i}" style="${rowStyle}"><td>${i+1}${recoveredBadge}</td><td><span class="time-link" data-ts="${it.start.toISOString()}">${fmtTimeWithTz(it.start, true)}</span></td><td><span class="time-link" data-ts="${it.stop.toISOString()}">${fmtTimeWithTz(it.stop, true)}</span></td><td><span class="tag ok">${fmtTime(it.secs)}</span></td><td>${it.projectName || '—'}</td><td>${it.taskId || ''}</td><td><span class="tag ${stopCls}">${it.stopReason}</span></td></tr>`;
+        // Check if this interval has any warnings
+        const intervalWarnings = data.warns.filter(w => w.intervalIdx === i);
+        const warningIcon = intervalWarnings.length > 0 ? `<span class="interval-warning-icon" title="${intervalWarnings.length} warning(s)">⚠️</span>` : '';
+        
+        return `<tr id="row-${i}" style="${rowStyle}"><td>${i+1}${recoveredBadge}${warningIcon}</td><td><span class="time-link" data-ts="${it.start.toISOString()}">${fmtTimeWithTz(it.start, true)}</span></td><td><span class="time-link" data-ts="${it.stop.toISOString()}">${fmtTimeWithTz(it.stop, true)}</span></td><td><span class="tag ok">${fmtTime(it.secs)}</span></td><td>${it.projectName || '—'}</td><td>${it.taskId || ''}</td><td><span class="tag ${stopCls}">${it.stopReason}</span></td></tr>`;
       }).join('');
 
       $('intervalsBody').querySelectorAll('.time-link').forEach(el => {
@@ -820,29 +834,81 @@ if (it.stopReason === 'PROJECT_CONFIGURATION_URL') {
       }).join('');
 
       if (data.warns.length) {
-        $('warningsList').innerHTML = data.warns.map(w => {
-          let msg, cls = '';
+        $('warningsList').innerHTML = data.warns.map((w, wIdx) => {
+          let msg, borderCls = '';
           const hasLearnMore = ['QUICK_STARTSTOP', 'CRASH_RECOVERED', 'CRASH_TIME_LOST', 'CRASH_NO_TRACKING', 'UNCLOSED', 'UNMATCHED', 'STOPPED_BY_CONFIG', 'STOPPED_BY_URL_PERMISSION'].includes(w.type);
           const learnMoreBtn = hasLearnMore ? `<button class="learn-more-btn" data-type="${w.type}">Learn more</button>` : '';
+          
+          // Determine border color based on warning type
+          if (w.type === 'CRASH_RECOVERED') borderCls = 'success-border';
+          else if (w.type === 'CRASH_TIME_LOST' || w.type === 'STOPPED_BY_CONFIG' || w.type === 'STOPPED_BY_URL_PERMISSION') borderCls = 'danger-border';
+          else if (w.type === 'CRASH_NO_TRACKING') borderCls = 'info-border';
+          
+          // Format timestamp badge
+          const timeBadge = w.time ? `<span class="warning-time">${fmtTimeWithTz(w.time)}</span>` : '';
+          
+          // Determine if clickable (has linked interval or time for timeline)
+          const isClickable = w.intervalIdx !== undefined || w.time;
+          const jumpHint = isClickable ? '<span class="warning-jump">↵ click to jump</span>' : '';
+          const clickableClass = isClickable ? 'clickable' : '';
+          const dataAttrs = `data-widx="${wIdx}" ${w.intervalIdx !== undefined ? `data-interval="${w.intervalIdx}"` : ''} ${w.time ? `data-time="${w.time.toISOString()}"` : ''}`;
 
           if (plain) {
             if (w.type === 'UNCLOSED') msg = 'Timer started but never stopped - likely a crash or still running.';
             else if (w.type === 'UNMATCHED') msg = 'Stop found without matching start - log may be incomplete.';
-            else if (w.type === 'QUICK_STARTSTOP') msg = `⚡ User likely double-clicked the record button at ${fmtTimeWithTz(w.time)} - timer started and stopped almost instantly.`;
-            else if (w.type === 'CRASH_RECOVERED') { msg = `✅ App crashed at ${fmtTimeWithTz(w.time)} but time was recovered successfully.`; cls = 'color:var(--accent)'; }
-            else if (w.type === 'CRASH_TIME_LOST') { msg = `⚠️ App crashed at ${fmtTimeWithTz(w.time)} - some time may have been lost. Check the dashboard to confirm.`; cls = 'color:var(--warn)'; }
-            else if (w.type === 'CRASH_NO_TRACKING') msg = `ℹ️ App crashed at ${fmtTimeWithTz(w.time)} but user wasn't tracking, so no time was lost.`;
-else if (w.type === 'STOPPED_BY_URL_PERMISSION') msg = `🔗 Tracking stopped at ${fmtTimeWithTz(w.time)} because URL permission wasn't granted. The project requires URL tracking.`;
-else msg = w.msg;
+            else if (w.type === 'QUICK_STARTSTOP') msg = `⚡ User likely double-clicked the record button - timer started and stopped almost instantly.`;
+            else if (w.type === 'CRASH_RECOVERED') msg = `✅ App crashed but time was recovered successfully.`;
+            else if (w.type === 'CRASH_TIME_LOST') msg = `⚠️ App crashed - some time may have been lost. Check the dashboard to confirm.`;
+            else if (w.type === 'CRASH_NO_TRACKING') msg = `ℹ️ App crashed but user wasn't tracking, so no time was lost.`;
+            else if (w.type === 'STOPPED_BY_URL_PERMISSION') msg = `🔗 Tracking stopped because URL permission wasn't granted. The project requires URL tracking.`;
+            else if (w.type === 'STOPPED_BY_CONFIG') msg = `⚙️ Tracking was stopped by a configuration setting or limit.`;
+            else msg = w.msg;
           } else { msg = w.msg; }
-          return `<li style="${cls}"><span>${msg}</span>${learnMoreBtn}</li>`;
+          
+          return `<li class="${clickableClass} ${borderCls}" ${dataAttrs}>${timeBadge}<span>${msg}</span>${jumpHint}${learnMoreBtn}</li>`;
         }).join('');
       } else {
         $('warningsList').innerHTML = '<li style="color:var(--muted)">No warnings</li>';
       }
 
+      // Add click handlers for warnings
       $('warningsList').querySelectorAll('.learn-more-btn').forEach(btn => {
-        btn.addEventListener('click', () => showLearnMore(btn.dataset.type));
+        btn.addEventListener('click', (e) => {
+          e.stopPropagation(); // Don't trigger the li click
+          showLearnMore(btn.dataset.type);
+        });
+      });
+      
+      $('warningsList').querySelectorAll('li.clickable').forEach(li => {
+        li.addEventListener('click', (e) => {
+          if (e.target.classList.contains('learn-more-btn')) return;
+          
+          const intervalIdx = li.dataset.interval;
+          const timeStr = li.dataset.time;
+          
+          // Highlight related interval row
+          if (intervalIdx !== undefined) {
+            const row = $('row-' + intervalIdx);
+            if (row) {
+              // Remove any existing highlights
+              document.querySelectorAll('tr.warning-highlight').forEach(r => r.classList.remove('warning-highlight'));
+              document.querySelectorAll('tr.highlight').forEach(r => r.classList.remove('highlight'));
+              
+              // Add highlight and scroll into view
+              row.classList.add('highlight');
+              row.classList.add('warning-highlight');
+              row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+              
+              // Remove animation class after it plays
+              setTimeout(() => row.classList.remove('warning-highlight'), 600);
+            }
+          }
+          
+          // Also snap timeline to the time
+          if (timeStr) {
+            snapToTime(timeStr);
+          }
+        });
       });
 
       renderTimeline(data);
