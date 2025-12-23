@@ -581,7 +581,7 @@
       let type = null, reason = null, plain = '', secs = null, keepIdle = null, stopTrack = null, resumeStart = null;
 
       if (line.includes('(START_TRACKING)')) type = 'START_TRACKING';
-      else if (line.includes('(STOP_TRACKING)')) type = 'STOP_TRACKING';
+      else if (line.includes('(STOP_TRACKING)') || line.includes('(STOP_ERROR)')) type = 'STOP_TRACKING';
       else if (line.includes('(IDLE_WAKE)')) { type = 'IDLE_WAKE'; plain = 'User returned from idle.'; }
       else if (line.includes('(IDLE)') && !line.includes('IDLE_')) { type = 'IDLE'; plain = 'User went idle.'; }
       else if (line.includes('(START_BREAK)')) { type = 'START_BREAK'; plain = 'User started a break.'; }
