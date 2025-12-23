@@ -38,6 +38,9 @@
     .help-link { color: var(--accent); text-decoration: underline; cursor: pointer; margin-left: auto; }
     .tz-input-group { display: flex; align-items: center; gap: 6px; padding-left: 12px; border-left: 1px solid var(--border); }
     .tz-input-group input { width: 100px; background: var(--panel); border: 1px solid var(--border); border-radius: 4px; padding: 4px 8px; color: var(--text); font-size: 12px; }
+    .date-filter-group { display: flex; align-items: center; gap: 8px; padding-left: 12px; border-left: 1px solid var(--border); font-size: 12px; color: var(--muted); }
+    .date-filter-group input[type="date"] { background: var(--panel); border: 1px solid var(--border); border-radius: 4px; padding: 4px 8px; color: var(--text); font-size: 12px; color-scheme: dark; }
+    .date-filter-group button { padding: 4px 8px; font-size: 11px; }
 
     .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin-bottom: 16px; }
     .kpi { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 14px; }
@@ -157,6 +160,13 @@
           <input type="text" id="tzOffset" placeholder="e.g. 08:00 or +5.5">
           <span id="tzLabel" style="font-size:11px"></span>
         </div>
+        <div class="date-filter-group">
+  <label>Filter dates:</label>
+  <input type="date" id="dateFrom" title="From date">
+  <span>to</span>
+  <input type="date" id="dateTo" title="To date">
+  <button id="clearDates">Clear</button>
+</div>
         <span class="help-link" id="helpBtn">Help & Info</span>
       </div>
     </div>
@@ -427,6 +437,60 @@
   <script>
     const $ = id => document.getElementById(id);
     const pad = n => String(n).padStart(2, '0');
+    function filterByDate(data) {
+  const fromVal = $('dateFrom').value;
+  const toVal = $('dateTo').value;
+  if (!fromVal && !toVal) return data;
+  
+  const fromDate = fromVal ? new Date(fromVal + 'T00:00:00') : null;
+  const toDate = toVal ? new Date(toVal + 'T23:59:59') : null;
+  
+  const filterInterval = (i) => {
+    if (fromDate && i.start < fromDate) return false;
+    if (toDate && i.stop > toDate) return false;
+    return true;
+  };
+  
+  const filterEvent = (e) => {
+    if (fromDate && e.ts < fromDate) return false;
+    if (toDate && e.ts > toDate) return false;
+    return true;
+  };
+  
+  const filteredIntervals = data.intervals.filter(filterInterval);
+  const filteredDiscarded = data.discarded.filter(filterInterval);
+  const filteredEvents = data.events.filter(filterEvent);
+  const filteredAllEvents = data.allEvents.filter(filterEvent);
+  
+  // Recalculate idle from filtered events
+  let idleKept = 0, idleDisc = 0;
+  const answers = filteredAllEvents.filter(e => e.type === 'IDLE_ANSWER');
+  for (const a of answers) {
+    const wake = filteredAllEvents.filter(e => e.type === 'IDLE_WAKE' && e.ts < a.ts).pop();
+    if (wake?.secs) {
+      if (a.keepIdle === 1) idleKept += wake.secs;
+      else if (a.stopTrack === 1) idleDisc += wake.secs;
+    }
+  }
+  
+  // Filter warnings by time
+  const filteredWarns = data.warns.filter(w => {
+    if (!w.time) return true;
+    if (fromDate && w.time < fromDate) return false;
+    if (toDate && w.time > toDate) return false;
+    return true;
+  });
+  
+  return {
+    intervals: filteredIntervals,
+    discarded: filteredDiscarded,
+    warns: filteredWarns,
+    events: filteredEvents,
+    idleKept,
+    idleDisc,
+    allEvents: filteredAllEvents
+  };
+}
     const fmtTime = s => { s = Math.max(0, Math.floor(s)); return Math.floor(s/3600) + ':' + pad(Math.floor((s%3600)/60)) + ':' + pad(s%60); };
 
     let result = null;
@@ -865,13 +929,16 @@
       });
     }
 
-    $('analyzeBtn').onclick = () => {
-      result = analyze($('logInput').value);
-      $('status').textContent = result ? `Found ${result.allEvents.length} events` : 'No valid events found';
-      $('status').className = 'status ' + (result ? 'success' : 'error');
-      render(result);
-      hideInfoBox();
-    };
+    let fullResult = null;
+
+$('analyzeBtn').onclick = () => {
+  fullResult = analyze($('logInput').value);
+  result = fullResult ? filterByDate(fullResult) : null;
+  $('status').textContent = result ? `Found ${result.allEvents.length} events` : 'No valid events found';
+  $('status').className = 'status ' + (result ? 'success' : 'error');
+  render(result);
+  hideInfoBox();
+};
 
     $('clearBtn').onclick = () => {
       $('logInput').value = '';
@@ -884,6 +951,9 @@
         if (result.allEvents) result.allEvents.length = 0;
       }
       result = null;
+      fullResult = null;
+      $('dateFrom').value = '';
+      $('dateTo').value = '';
       timelineMin = null;
       timelineDur = null;
       focusRatio = null;
@@ -897,6 +967,9 @@
     };
 
     $('plainMode').onchange = () => render(result);
+    $('dateFrom').onchange = () => { if (fullResult) { result = filterByDate(fullResult); render(result); } };
+    $('dateTo').onchange = () => { if (fullResult) { result = filterByDate(fullResult); render(result); } };
+    $('clearDates').onclick = () => { $('dateFrom').value = ''; $('dateTo').value = ''; if (fullResult) { result = filterByDate(fullResult); render(result); } };
     $('tzOffset').oninput = () => { updateTzLabel(); if ($('userTzMode').checked) render(result); };
     $('userTzMode').onchange = () => {
       if ($('userTzMode').checked && userTzOffsetMs === null) {
