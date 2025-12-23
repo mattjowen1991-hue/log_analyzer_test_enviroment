@@ -109,7 +109,7 @@
     .info-box .label { color: var(--muted); }
     .info-box .touch-link { color: var(--link); text-decoration: underline; cursor: pointer; font-size: 11px; margin-top: 8px; display: inline-block; }
 
-    .warnings-list { list-style: none; padding-left: 0; }
+    .warnings-list { list-style: none; padding-left: 0; max-height: 240px; overflow-y: auto; }
     .warnings-list li { padding: 10px 12px; font-size: 12px; color: var(--text); border-bottom: 1px dashed var(--border); line-height: 1.6; border-radius: 6px; margin-bottom: 4px; transition: background 0.15s; }
     .warnings-list li:last-child { border-bottom: none; margin-bottom: 0; }
     .warnings-list li.clickable { cursor: pointer; border-left: 3px solid var(--warn); padding-left: 10px; }
@@ -123,6 +123,8 @@
     .learn-more-btn:hover { background: #2563eb; }
     tr.warning-highlight { animation: warningPulse 0.6s ease-out; }
     @keyframes warningPulse { 0%, 100% { background: transparent; } 50% { background: rgba(245,158,11,0.4); } }
+    tr.event-highlight { background: rgba(59,130,246,0.3) !important; }
+    tr.event-highlight td { color: #fff; font-weight: 600; }
     .interval-warning-icon { color: var(--warn); margin-left: 6px; cursor: help; font-size: 11px; }
 
     .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.75); z-index: 1001; align-items: center; justify-content: center; }
@@ -830,7 +832,7 @@ if (type === 'START_TRACKING' || type === 'STOP_TRACKING') {
         else if (e.type === 'RESUME_IGNORED') { cls += ' warn'; rowStyle = 'background: rgba(245,158,11,0.1);'; if (plain) detail = '⚠️ Previous session too old - time could not be recovered'; }
         else if (e.type.includes('CLEAN') || e.type === 'SHUTDOWN') cls += ' ok';
 
-        return `<tr style="${rowStyle}"><td>${fmtTimeWithTz(e.ts, true)}</td><td><span class="${cls}">${e.type}</span></td><td style="color:var(--muted);font-size:11px;">${detail}</td></tr>`;
+        return `<tr style="${rowStyle}" data-event-time="${e.ts.getTime()}" data-event-type="${e.type}"><td>${fmtTimeWithTz(e.ts, true)}</td><td><span class="${cls}">${e.type}</span></td><td style="color:var(--muted);font-size:11px;">${detail}</td></tr>`;
       }).join('');
 
       if (data.warns.length) {
@@ -841,8 +843,8 @@ if (type === 'START_TRACKING' || type === 'STOP_TRACKING') {
           
           // Determine border color based on warning type
           if (w.type === 'CRASH_RECOVERED') borderCls = 'success-border';
-          else if (w.type === 'CRASH_TIME_LOST' || w.type === 'STOPPED_BY_CONFIG' || w.type === 'STOPPED_BY_URL_PERMISSION') borderCls = 'danger-border';
-          else if (w.type === 'CRASH_NO_TRACKING') borderCls = 'info-border';
+          else if (w.type === 'CRASH_TIME_LOST' || w.type === 'STOPPED_BY_CONFIG' || w.type === 'STOPPED_BY_URL_PERMISSION' || w.type === 'UNCLOSED') borderCls = 'danger-border';
+          else if (w.type === 'CRASH_NO_TRACKING' || w.type === 'UNMATCHED') borderCls = 'info-border';
           
           // Format timestamp badge
           const timeBadge = w.time ? `<span class="warning-time">${fmtTimeWithTz(w.time)}</span>` : '';
@@ -885,15 +887,17 @@ if (type === 'START_TRACKING' || type === 'STOP_TRACKING') {
           
           const intervalIdx = li.dataset.interval;
           const timeStr = li.dataset.time;
+          let didSomething = false;
+          
+          // Remove any existing highlights first
+          document.querySelectorAll('tr.warning-highlight').forEach(r => r.classList.remove('warning-highlight'));
+          document.querySelectorAll('tr.highlight').forEach(r => r.classList.remove('highlight'));
+          document.querySelectorAll('tr.event-highlight').forEach(r => r.classList.remove('event-highlight'));
           
           // Highlight related interval row
-          if (intervalIdx !== undefined) {
+          if (intervalIdx !== undefined && intervalIdx !== '') {
             const row = $('row-' + intervalIdx);
             if (row) {
-              // Remove any existing highlights
-              document.querySelectorAll('tr.warning-highlight').forEach(r => r.classList.remove('warning-highlight'));
-              document.querySelectorAll('tr.highlight').forEach(r => r.classList.remove('highlight'));
-              
               // Add highlight and scroll into view
               row.classList.add('highlight');
               row.classList.add('warning-highlight');
@@ -901,12 +905,36 @@ if (type === 'START_TRACKING' || type === 'STOP_TRACKING') {
               
               // Remove animation class after it plays
               setTimeout(() => row.classList.remove('warning-highlight'), 600);
+              didSomething = true;
+            }
+          }
+          
+          // Highlight related event row (for crash warnings, unclosed starts, etc.)
+          if (timeStr) {
+            const targetTime = new Date(timeStr).getTime();
+            const eventRows = $('eventsBody').querySelectorAll('tr[data-event-time]');
+            for (const row of eventRows) {
+              const rowTime = parseInt(row.dataset.eventTime);
+              // Match if within 2 seconds (to handle slight timestamp differences)
+              if (Math.abs(rowTime - targetTime) < 2000) {
+                row.classList.add('event-highlight');
+                row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                didSomething = true;
+                break;
+              }
             }
           }
           
           // Also snap timeline to the time
-          if (timeStr) {
+          if (timeStr && timelineMin && timelineDur) {
             snapToTime(timeStr);
+            didSomething = true;
+          }
+          
+          // If we couldn't jump anywhere, briefly flash the warning to acknowledge the click
+          if (!didSomething) {
+            li.style.background = 'rgba(245,158,11,0.3)';
+            setTimeout(() => { li.style.background = ''; }, 300);
           }
         });
       });
