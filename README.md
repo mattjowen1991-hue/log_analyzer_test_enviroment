@@ -48,7 +48,7 @@ Two sample buttons are provided for testing:
 - **Tracked Time Calculation** — Sums all intervals between START and STOP events
 - **Interval Breakdown** — Detailed table of each tracking session with start/stop times, duration, project, and stop reason
 - **Crash Detection** — Identifies app crashes and whether time was recovered
-- **Idle Time Tracking** — Shows idle time kept vs. discarded by the user
+- **Idle Time Tracking** — Shows idle time kept vs. discarded, with detailed decision history table
 
 ### Visual Timeline
 - **Interactive timeline** showing tracking blocks, idle periods, and app events
@@ -117,6 +117,28 @@ Each row shows:
 - **Task** — Task ID if available
 - **Stop Reason** — Why tracking stopped (USER, IDLE, SHUTDOWN, CONFIGURATION, etc.)
 
+### Idle Time Decisions Table
+
+Shows every idle prompt response with full details:
+
+| Column | Description |
+|--------|-------------|
+| **Time** | When the user responded to the idle prompt |
+| **Idle Duration** | How long the user was idle before responding |
+| **Response Time** | How many seconds the user took to answer the prompt |
+| **User Action** | What the user chose (see below) |
+| **Raw Values** | The actual `KeepIdle` and `StopTracking` values from the log |
+
+**User Action Types:**
+
+| Display | Raw Values | Meaning |
+|---------|------------|---------|
+| ✅ KEPT - User clicked YES | `KeepIdle: 1 / StopTracking: 0` | User chose to keep the idle time |
+| ❌ DISCARDED - User clicked NO | `KeepIdle: 0 / StopTracking: 0` | User discarded idle time but continued tracking |
+| 🛑 DISCARDED + STOPPED | `KeepIdle: 0 / StopTracking: 1` | User discarded idle time and stopped tracking |
+
+**⚠️ >1hr Warning:** If idle duration exceeds 1 hour, a warning badge appears. Idle time over 1 hour cannot be kept regardless of user choice.
+
 ### Events Table
 
 Shows all non-tracking events:
@@ -155,8 +177,14 @@ When the app crashes while tracking:
 
 1. Find all `IDLE_ANSWER` events
 2. Look backwards for the most recent `IDLE_WAKE` event
-3. Extract the "after X seconds" value
-4. Add to "Kept" or "Discarded" based on user's choice
+3. Extract the idle duration from the `IDLE_WAKE` "after X seconds" value
+4. Extract the response time from the `IDLE_ANSWER` "after X seconds with" value
+5. Determine decision type based on `KeepIdle` and `StopTracking` flags:
+   - `KeepIdle: 1` → User kept idle time
+   - `KeepIdle: 0 / StopTracking: 1` → User discarded and stopped tracking
+   - `KeepIdle: 0 / StopTracking: 0` → User discarded but continued tracking
+6. Add to "Kept" or "Discarded" totals accordingly
+7. Record full decision details in the Idle Time Decisions table
 
 ---
 
@@ -304,7 +332,7 @@ Enter the offset in one of these formats:
 
 ## Version History
 
-- **v34** — Current version with full crash recovery analysis, clickable warnings, date filtering, and user timezone support
+- **v34** — Current version with full crash recovery analysis, clickable warnings, date filtering, user timezone support, and idle time decisions table
 
 ---
 
