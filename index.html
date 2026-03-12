@@ -1082,7 +1082,7 @@ if (type === 'START_TRACKING' || type === 'STOP_TRACKING') {
         }
         // Parse from raw text directly
         const tzMatch = text.match(/[+-](\d{2}):?(\d{2})/);
-        const firstTzLine = text.match(/([+-]\d{2}:?\d{2})/);
+        const firstTzLine = text.match(/\d{2}:\d{2}:\d{2}([+-]\d{2}:?\d{2})/);
         if (firstTzLine) {
           detectedTz = firstTzLine[1];
           if (detectedTz.length === 5 && !detectedTz.includes(':')) detectedTz = detectedTz.slice(0,3) + ':' + detectedTz.slice(3);
@@ -1117,6 +1117,8 @@ if (type === 'START_TRACKING' || type === 'STOP_TRACKING') {
     function render(data) {
       const plain = $('plainMode').checked;
 
+      const existingTzBanner = document.getElementById('tzWarningBanner');
+      if (existingTzBanner) existingTzBanner.remove();
       if (!data) {
         $('kpiTotal').textContent = '0:00:00';
         $('kpiIntervals').textContent = '0';
@@ -1138,8 +1140,6 @@ if (type === 'START_TRACKING' || type === 'STOP_TRACKING') {
       $('kpiWarnings').textContent = data.warns.length; // updated below after allWarns is built
 
       // Timezone banner
-      const existingTzBanner = document.getElementById('tzWarningBanner');
-      if (existingTzBanner) existingTzBanner.remove();
       const kpisEl = document.querySelector('.kpis');
       if (data.detectedTzNegative) {
         const banner = document.createElement('div');
